@@ -37,7 +37,7 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 
 ## The Provisioner Contract
 
-This provisioner must satisfy the contract defined in `blockhost-common/provisioner-contract.md`. The key integration points:
+This provisioner must satisfy the contract defined in `PROVISIONER_INTERFACE.md` (in this repo). That document has the exact signatures, output schemas, and integration points derived from the working Proxmox implementation. The key integration points:
 
 ### 1. Manifest (`provisioner.json`)
 Installed to `/usr/share/blockhost/provisioner.json`. Declares all commands, wizard module, first-boot hook, root agent actions, and config keys. The engine, installer, and root agent all discover capabilities through this file.
