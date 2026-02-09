@@ -35,28 +35,20 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 - `blockhost-broker` — IPv6 tunnel broker (broker-client saves allocation to `/etc/blockhost/broker-allocation.json`)
 - `libpam-web3-tools` — Provides signing page HTML and `pam_web3_tool` CLI
 
-## The Provisioner Contract
+## Interface Contracts (REFERENCE)
 
-This provisioner must satisfy the contract defined in `PROVISIONER_INTERFACE.md` (in this repo). That document has the exact signatures, output schemas, and integration points derived from the working Proxmox implementation. The key integration points:
+**Contract specs define how this package interfaces with the rest of the system.** Read and internalize the relevant contract before implementing any script that calls common's API or any interface consumed by the engine/wizard/root-agent. Do not rely on assumptions — read the contract.
 
-### 1. Manifest (`provisioner.json`)
-Installed to `/usr/share/blockhost/provisioner.json`. Declares all commands, wizard module, first-boot hook, root agent actions, and config keys. The engine, installer, and root agent all discover capabilities through this file.
+| Contract | Covers | Read when... |
+|----------|--------|-------------|
+| `PROVISIONER_INTERFACE.md` | The provisioner contract this package must satisfy — manifest, CLI commands, wizard plugin, root agent actions, first-boot hook | Implementing any CLI command, wizard export, or root agent action |
+| `COMMON_INTERFACE.md` | blockhost-common's public API — config, vm_db, root_agent, cloud_init | Using any import from `blockhost.*` |
 
-### 2. CLI Commands
-All `blockhost-vm-*` commands must accept the same arguments and produce the same output format as the Proxmox provisioner. The engine calls these commands — it doesn't know or care which hypervisor is behind them.
+**Section 9 of COMMON_INTERFACE.md lists 8 known violations** in common where Proxmox-specific logic leaked in. Be aware of these when implementing — some common exports (like `qm_*` wrappers, `get_terraform_dir()`, `ALLOWED_ROUTE_DEVS = {'vmbr0'}`) are Proxmox-specific and should not be used. Use the generic `call()` for root agent actions and ignore Terraform/VMID-related exports.
 
-### 3. Wizard Plugin
-Flask Blueprint registered at `blockhost.provisioner_libvirt.wizard`. Must export:
-- `blueprint` — Flask Blueprint with config page routes
-- `get_finalization_steps()` — Returns `list[tuple[str, str, callable]]` for wizard finalization
-- `get_summary_data(session)` — Returns dict for review page
-- `get_summary_template()` — Returns template path for summary section
+## Interface Integrity (PERSISTENT RULE)
 
-### 4. Root Agent Actions
-Python module at `/usr/share/blockhost/root-agent-actions/virsh.py`. Must export an `ACTIONS` dict mapping action names to handler functions. Handlers receive `params: dict` and return `{'ok': True/False, ...}`.
-
-### 5. First-Boot Hook
-Script at `/usr/share/blockhost/provisioner-hooks/first-boot.sh`. Installs libvirt/KVM stack. Must be idempotent (step markers). Receives `STATE_DIR` and `LOG_FILE` from caller.
+**When interfaces don't match, fix the interface — never wrap the mismatch.** If the contract says one thing and common's code does another, flag it to the main session. Do not write adapters to work around mismatches.
 
 ## Key Differences from Proxmox Provisioner
 
