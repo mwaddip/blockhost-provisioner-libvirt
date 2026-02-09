@@ -41,10 +41,10 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 
 | Contract | Covers | Read when... |
 |----------|--------|-------------|
-| `PROVISIONER_INTERFACE.md` | The provisioner contract this package must satisfy — manifest, CLI commands, wizard plugin, root agent actions, first-boot hook | Implementing any CLI command, wizard export, or root agent action |
-| `COMMON_INTERFACE.md` | blockhost-common's public API — config, vm_db, root_agent, cloud_init | Using any import from `blockhost.*` |
+| `facts/PROVISIONER_INTERFACE.md` | The provisioner contract this package must satisfy — manifest, CLI commands, wizard plugin, root agent actions, first-boot hook | Implementing any CLI command, wizard export, or root agent action |
+| `facts/COMMON_INTERFACE.md` | blockhost-common's public API — config, vm_db, root_agent, cloud_init | Using any import from `blockhost.*` |
 
-**Section 9 of COMMON_INTERFACE.md lists 8 known violations** in common where Proxmox-specific logic leaked in. Be aware of these when implementing — some common exports (like `qm_*` wrappers, `get_terraform_dir()`, `ALLOWED_ROUTE_DEVS = {'vmbr0'}`) are Proxmox-specific and should not be used. Use the generic `call()` for root agent actions and ignore Terraform/VMID-related exports.
+**Section 9 of facts/COMMON_INTERFACE.md lists 8 known violations** in common where Proxmox-specific logic leaked in. Be aware of these when implementing — some common exports (like `qm_*` wrappers, `get_terraform_dir()`, `ALLOWED_ROUTE_DEVS = {'vmbr0'}`) are Proxmox-specific and should not be used. Use the generic `call()` for root agent actions and ignore Terraform/VMID-related exports.
 
 ## Interface Integrity (PERSISTENT RULE)
 
