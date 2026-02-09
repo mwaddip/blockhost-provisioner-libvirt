@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "macros/step_bar.html" import step_bar %}
+
+{% block title %}libvirt/KVM Configuration{% endblock %}
+
+{% block content %}
+{{ step_bar(current_step='libvirt') }}
+
+<div class="card">
+    <h2>libvirt/KVM Configuration</h2>
+    <p>Configure the libvirt hypervisor for VM provisioning.</p>
+
+    {% if not detected.kvm_available %}
+    <div class="alert alert-warning">
+        KVM hardware acceleration not detected (/dev/kvm missing).
+        VMs will run in QEMU emulation mode, which is significantly slower.
+    </div>
+    {% endif %}
+
+    {% if not detected.libvirtd_running %}
+    <div class="alert alert-warning">
+        libvirtd service is not running. It will be started during finalization.
+    </div>
+    {% endif %}
+
+    <form method="POST">
+        <fieldset>
+            <legend>Storage</legend>
+            <div class="form-group">
+                <label for="storage_pool">Storage pool name</label>
+                <input type="text" id="storage_pool" name="storage_pool"
+                       value="blockhost" required>
+            </div>
+            <div class="form-group">
+                <label for="storage_path">Storage path</label>
+                <input type="text" id="storage_path" name="storage_path"
+                       value="/var/lib/blockhost/vms" required>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Network</legend>
+            <div class="form-group">
+                <label for="network_mode">Network mode</label>
+                <select id="network_mode" name="network_mode">
+                    <option value="bridge">Linux bridge (for external access)</option>
+                    <option value="nat">NAT (libvirt default network)</option>
+                </select>
+            </div>
+            <div class="form-group" id="bridge-config">
+                <label for="bridge_interface">Bridge interface</label>
+                <select id="bridge_interface" name="bridge_interface">
+                    {% for br in detected.bridges %}
+                    <option value="{{ br }}">{{ br }}</option>
+                    {% endfor %}
+                    <option value="">Manual entry...</option>
+                </select>
+            </div>
+            <div class="form-group" id="nat-config" style="display:none">
+                <label for="network_name">libvirt network name</label>
+                <input type="text" id="network_name" name="network_name"
+                       value="blockhost">
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>IP Pool</legend>
+            <div class="form-group">
+                <label for="ip_network">Network (CIDR)</label>
+                <input type="text" id="ip_network" name="ip_network"
+                       placeholder="192.168.122.0/24" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="ip_start">Start IP</label>
+                    <input type="text" id="ip_start" name="ip_start"
+                           placeholder="192.168.122.100" required>
+                </div>
+                <div class="form-group">
+                    <label for="ip_end">End IP</label>
+                    <input type="text" id="ip_end" name="ip_end"
+                           placeholder="192.168.122.200" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="gateway">Gateway</label>
+                <input type="text" id="gateway" name="gateway"
+                       placeholder="192.168.122.1" required>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Lifecycle</legend>
+            <div class="form-group">
+                <label for="gc_grace_days">Grace period before VM destruction (days)</label>
+                <input type="number" id="gc_grace_days" name="gc_grace_days"
+                       value="7" min="1" max="90">
+            </div>
+        </fieldset>
+
+        <div class="form-actions">
+            <a href="{{ prev_step_url }}" class="btn btn-secondary">Back</a>
+            <button type="submit" class="btn btn-primary">Continue</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.getElementById('network_mode').addEventListener('change', function() {
+    document.getElementById('bridge-config').style.display =
+        this.value === 'bridge' ? '' : 'none';
+    document.getElementById('nat-config').style.display =
+        this.value === 'nat' ? '' : 'none';
+});
+</script>
+{% endblock %}

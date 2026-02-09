@@ -1,0 +1,10 @@
+[Unit]
+Description=BlockHost VM garbage collection
+After=libvirtd.service
+Wants=libvirtd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/blockhost-vm-gc --execute
+User=blockhost
+Group=blockhost

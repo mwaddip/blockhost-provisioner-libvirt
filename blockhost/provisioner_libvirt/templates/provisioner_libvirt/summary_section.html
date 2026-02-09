@@ -1,0 +1,25 @@
+<div class="summary-section">
+    <h3>libvirt/KVM</h3>
+    <table class="summary-table">
+        <tr>
+            <td>Storage pool</td>
+            <td>{{ provisioner.storage_pool }}</td>
+        </tr>
+        <tr>
+            <td>Storage path</td>
+            <td>{{ provisioner.storage_path }}</td>
+        </tr>
+        <tr>
+            <td>Network</td>
+            <td>{{ provisioner.network_mode }} — {{ provisioner.network_name }}</td>
+        </tr>
+        <tr>
+            <td>IP range</td>
+            <td>{{ provisioner.ip_start }} – {{ provisioner.ip_end }}</td>
+        </tr>
+        <tr>
+            <td>GC grace period</td>
+            <td>{{ provisioner.gc_grace_days }} days</td>
+        </tr>
+    </table>
+</div>

@@ -1,0 +1,234 @@
+# PROJECT.yaml — Machine-readable API specification
+# Keep this in sync with the codebase at all times.
+
+name: blockhost-provisioner-libvirt
+version: "0.1.0"
+description: >
+  libvirt/KVM VM provisioning backend for BlockHost.
+  Implements the provisioner contract using virsh + cloud-init.
+  Proof-of-concept for the provisioner abstraction layer.
+
+package:
+  name: blockhost-provisioner-libvirt
+  architecture: all
+  depends:
+    - python3 (>= 3.10)
+    - blockhost-common (>= 0.1.0)
+    - libpam-web3-tools (>= 0.5.0)
+  recommends:
+    - qemu-kvm
+    - libvirt-daemon-system
+    - libvirt-clients
+    - virtinst
+    - cloud-image-utils
+    - libguestfs-tools
+    - python3-libvirt
+
+manifest:
+  path: /usr/share/blockhost/provisioner.json
+  name: libvirt
+  display_name: "libvirt/KVM + cloud-init"
+
+entry_points:
+  blockhost-vm-create:
+    source: scripts/vm-create.py
+    status: stub
+    args:
+      - name: name
+        type: positional
+        required: true
+        description: VM name
+      - name: --owner-wallet
+        type: string
+        required: true
+        description: Owner wallet address (0x...)
+      - name: --cpu
+        type: int
+        default: 1
+        description: Number of vCPUs
+      - name: --memory
+        type: int
+        default: 2048
+        description: Memory in MB
+      - name: --disk
+        type: int
+        default: 20
+        description: Disk size in GB
+      - name: --apply
+        type: flag
+        description: Actually create the VM
+      - name: --cloud-init-content
+        type: path
+        description: Path to pre-rendered cloud-init YAML
+      - name: --skip-mint
+        type: flag
+        description: Skip NFT minting
+      - name: --no-mint
+        type: flag
+        description: Skip minting (engine handles it)
+      - name: --user-signature
+        type: string
+        description: User signature for encrypted credentials
+      - name: --public-secret
+        type: string
+        description: Public secret for signature verification
+      - name: --mock
+        type: flag
+        description: Use mock database
+    output:
+      format: json
+      schema:
+        status: ok|error
+        vm_name: string
+        ip: string
+        ipv6: string
+        vmid: string  # domain name for libvirt
+        nft_token_id: int
+        username: string
+
+  blockhost-vm-destroy:
+    source: scripts/vm-destroy.sh
+    status: stub
+    args: ["name"]
+    notes: Must be idempotent
+
+  blockhost-vm-start:
+    source: scripts/vm-start.sh
+    status: stub
+    args: ["name"]
+
+  blockhost-vm-stop:
+    source: scripts/vm-stop.sh
+    status: stub
+    args: ["name"]
+    notes: Graceful ACPI shutdown
+
+  blockhost-vm-kill:
+    source: scripts/vm-kill.sh
+    status: stub
+    args: ["name"]
+    notes: Force stop (virsh destroy)
+
+  blockhost-vm-status:
+    source: scripts/vm-status.sh
+    status: stub
+    args: ["name"]
+    output: "active|suspended|destroyed|unknown"
+    notes: Exit 0 always
+
+  blockhost-vm-list:
+    source: scripts/vm-list.sh
+    status: stub
+    args: ["--format json"]
+    output: Tab-separated or JSON array
+
+  blockhost-vm-gc:
+    source: scripts/vm-gc.py
+    status: stub
+    args: ["--execute", "--suspend-only", "--destroy-only", "--grace-days N", "--mock"]
+    notes: Dry-run by default
+
+  blockhost-vm-resume:
+    source: scripts/vm-resume.py
+    status: stub
+    args: ["name", "--extend-days N", "--mock", "--dry-run"]
+
+  blockhost-vm-metrics:
+    source: scripts/vm-metrics.sh
+    status: stub
+
+  blockhost-vm-throttle:
+    source: scripts/vm-throttle.sh
+    status: stub
+
+  blockhost-build-template:
+    source: scripts/build-template.sh
+    status: stub
+    notes: Builds qcow2 base image with libguestfs
+
+  blockhost-mint-nft:
+    source: scripts/mint_nft.py
+    status: stub
+    args: ["--owner-wallet", "--machine-id", "--user-encrypted", "--public-secret", "--dry-run"]
+
+  blockhost-provisioner-detect:
+    source: scripts/provisioner-detect.sh
+    status: implemented
+    notes: "Exit 0 if virsh available, 1 otherwise"
+
+root_agent_actions:
+  module: root-agent-actions/virsh.py
+  actions:
+    virsh-start:
+      params: {domain: string}
+      runs: "virsh start <domain>"
+    virsh-destroy:
+      params: {domain: string}
+      runs: "virsh destroy <domain>"
+      notes: Force stop (not deletion)
+    virsh-shutdown:
+      params: {domain: string}
+      runs: "virsh shutdown <domain>"
+      notes: Graceful ACPI, 300s timeout
+    virsh-reboot:
+      params: {domain: string}
+      runs: "virsh reboot <domain>"
+    virsh-define:
+      params: {xml_path: string}
+      runs: "virsh define <xml_path>"
+      notes: xml_path must be under /var/lib/blockhost/
+    virsh-undefine:
+      params: {domain: string, remove_storage: bool}
+      runs: "virsh undefine <domain> [--remove-all-storage]"
+
+wizard:
+  module: blockhost.provisioner_libvirt.wizard
+  session_key: libvirt
+  routes:
+    - GET /wizard/libvirt
+    - POST /wizard/libvirt
+  finalization_steps:
+    - id: storage
+      display: "Configure storage pool"
+      function: finalize_storage
+    - id: network
+      display: "Configure network"
+      function: finalize_network
+    - id: template
+      display: "Build VM template"
+      function: finalize_template
+
+first_boot_hook:
+  path: provisioner-hooks/first-boot.sh
+  installs:
+    - qemu-kvm
+    - libvirt-daemon-system
+    - libvirt-clients
+    - virtinst
+    - cloud-image-utils
+    - libguestfs-tools
+    - python3-libvirt
+    - python3-ecdsa
+    - jq
+  step_markers:
+    - .step-libvirt
+    - .step-kvm-check
+
+config_keys:
+  session_key: libvirt
+  provisioner_config:
+    - storage_pool
+    - network_name
+  files_read:
+    - path: /etc/blockhost/db.yaml
+      keys: [storage_pool, network_name, ip_pool, grace_days]
+    - path: /etc/blockhost/web3-defaults.yaml
+      keys: [rpc_url, nft_contract, deployer_key_path]
+    - path: /etc/blockhost/broker-allocation.json
+      keys: [ipv6_prefix, gateway]
+
+paths:
+  template_image: /var/lib/blockhost/templates/blockhost-base.qcow2
+  cloud_init_dir: /var/lib/blockhost/cloud-init/
+  vm_disks: /var/lib/blockhost/vms/
+  template_packages: /var/lib/blockhost/template-packages/

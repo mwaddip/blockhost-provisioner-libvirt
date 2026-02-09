@@ -1,0 +1,13 @@
+build/
+*.deb
+__pycache__/
+*.pyc
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+accounting/mock-db.json
+SESSION_CONTEXT.md
+SETTINGS.md
+.claude/
