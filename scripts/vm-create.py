@@ -31,6 +31,7 @@ cleanup on failure can undo partial work.
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -238,8 +239,14 @@ def main():
     if not TEMPLATE_IMAGE.exists():
         fail(f"Template image not found: {TEMPLATE_IMAGE} (run blockhost-build-template first)")
 
-    VM_DISK_DIR.mkdir(parents=True, exist_ok=True)
-    CLOUD_INIT_DIR.mkdir(parents=True, exist_ok=True)
+    # Ensure directories are traversable by libvirt-qemu (o+rx)
+    for d in (TEMPLATE_IMAGE.parent, VM_DISK_DIR, CLOUD_INIT_DIR):
+        d.mkdir(parents=True, exist_ok=True)
+        st = d.stat()
+        d.chmod(st.st_mode | 0o005)  # add o+rx
+
+    # Template backing file must be readable by libvirt-qemu
+    os.chmod(TEMPLATE_IMAGE, 0o644)
 
     disk_path = VM_DISK_DIR / f"{args.name}.qcow2"
     if disk_path.exists():
@@ -297,6 +304,7 @@ def main():
 
     ci_dir = CLOUD_INIT_DIR / args.name
     ci_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(ci_dir, 0o755)  # traversable by libvirt-qemu
     allocated["cloud_init_dir"] = str(ci_dir)
 
     user_data_path = ci_dir / "user-data"
@@ -354,6 +362,7 @@ def main():
     except FileNotFoundError:
         fail("cloud-localds not found (install cloud-image-utils)", allocated)
 
+    os.chmod(ci_iso_path, 0o644)
     err("Cloud-init ISO created.")
 
     # --- Create disk overlay ---
@@ -371,6 +380,7 @@ def main():
     except subprocess.CalledProcessError as e:
         fail(f"qemu-img create failed: {e.stderr.strip()}", allocated)
 
+    os.chmod(disk_path, 0o644)
     allocated["disk_path"] = str(disk_path)
     err(f"Disk overlay created: {disk_path}")
 
