@@ -24,8 +24,8 @@
     {% endif %}
 
     <form method="POST">
-        <fieldset>
-            <legend>Storage</legend>
+        <div class="form-section">
+            <h3>Storage</h3>
             <div class="form-group">
                 <label for="storage_pool">Storage pool name</label>
                 <input type="text" id="storage_pool" name="storage_pool"
@@ -36,10 +36,10 @@
                 <input type="text" id="storage_path" name="storage_path"
                        value="/var/lib/blockhost/vms" required>
             </div>
-        </fieldset>
+        </div>
 
-        <fieldset>
-            <legend>Network</legend>
+        <div class="form-section">
+            <h3>Network</h3>
             <div class="form-group">
                 <label for="network_mode">Network mode</label>
                 <select id="network_mode" name="network_mode">
@@ -61,10 +61,10 @@
                 <input type="text" id="network_name" name="network_name"
                        value="blockhost">
             </div>
-        </fieldset>
+        </div>
 
-        <fieldset>
-            <legend>IP Pool</legend>
+        <div class="form-section">
+            <h3>IP Pool</h3>
             <div class="form-group">
                 <label for="ip_network">Network (CIDR)</label>
                 <input type="text" id="ip_network" name="ip_network"
@@ -87,18 +87,18 @@
                 <input type="text" id="gateway" name="gateway"
                        placeholder="192.168.122.1" required>
             </div>
-        </fieldset>
+        </div>
 
-        <fieldset>
-            <legend>Lifecycle</legend>
+        <div class="form-section">
+            <h3>Lifecycle</h3>
             <div class="form-group">
                 <label for="gc_grace_days">Grace period before VM destruction (days)</label>
                 <input type="number" id="gc_grace_days" name="gc_grace_days"
                        value="7" min="1" max="90">
             </div>
-        </fieldset>
+        </div>
 
-        <div class="form-actions">
+        <div class="flex justify-between" style="margin-top: 2rem;">
             <a href="{{ url_for('wizard_blockchain') }}" class="btn btn-secondary">Back</a>
             <button type="submit" class="btn btn-primary">Continue</button>
         </div>
