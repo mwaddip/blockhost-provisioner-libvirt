@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/step_bar.html" import step_bar %}
+{% from "macros/wizard_steps.html" import step_bar %}
 
 {% block title %}libvirt/KVM Configuration{% endblock %}
 
@@ -99,7 +99,7 @@
         </fieldset>
 
         <div class="form-actions">
-            <a href="{{ prev_step_url }}" class="btn btn-secondary">Back</a>
+            <a href="{{ url_for('wizard_blockchain') }}" class="btn btn-secondary">Back</a>
             <button type="submit" class="btn btn-primary">Continue</button>
         </div>
     </form>
