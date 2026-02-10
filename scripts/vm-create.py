@@ -457,13 +457,13 @@ def main():
 
     # Write network-config for static IP assignment
     network_config_path = ci_dir / "network-config"
-    gateway = _get_libvirt_network_gateway()
+    gateway = db_config.get("ip_pool", {}).get("gateway", "")
+    if not gateway:
+        gateway = _get_libvirt_network_gateway()
     if not gateway:
         gateway = _get_bridge_gateway(bridge_name)
     if not gateway:
-        gateway = db_config.get("gateway", "")
-    if not gateway:
-        fail("Cannot determine gateway (no IP on bridge, no gateway in db.yaml)", allocated)
+        fail("Cannot determine gateway", allocated)
 
     addresses_lines = f"      - {ip}/24\n"
     if ipv6:
