@@ -180,9 +180,16 @@ root_agent_actions:
 wizard:
   module: blockhost.provisioner_libvirt.wizard
   session_key: libvirt
+  exports:
+    - blueprint
+    - get_finalization_steps
+    - get_summary_data
+    - get_summary_template
+    - get_ui_params
   routes:
     - GET /wizard/libvirt
     - POST /wizard/libvirt
+  ui_params: {}  # empty — no web management UI
   finalization_steps:
     - id: storage
       display: "Configure storage pool"
@@ -195,6 +202,7 @@ wizard:
     - id: template
       display: "Build VM template"
       function: finalize_template
+      hint: "(this may take several minutes)"
       status: implemented
 
 first_boot_hook:

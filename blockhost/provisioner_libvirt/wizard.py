@@ -56,6 +56,15 @@ def wizard_libvirt():
 # --- Summary ---
 
 
+def get_ui_params(session_data: dict) -> dict:
+    """Return provisioner-specific UI parameters injected into all templates as prov_ui.
+
+    libvirt has no web management UI, so return empty dict.
+    All templates use | default() filters and will render with generic defaults.
+    """
+    return {}
+
+
 def get_summary_data(session_data: dict) -> dict:
     """Return provisioner-specific summary data."""
     libvirt = session_data.get("libvirt", {})
@@ -84,7 +93,8 @@ def get_finalization_steps() -> list[tuple]:
     return [
         ("storage", "Configuring storage pool", finalize_storage),
         ("network", "Configuring network", finalize_network),
-        ("template", "Building VM template", finalize_template),
+        ("template", "Building VM template", finalize_template,
+         "(this may take several minutes)"),
     ]
 
 
