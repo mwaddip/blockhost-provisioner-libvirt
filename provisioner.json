@@ -29,6 +29,6 @@
 
   "config_keys": {
     "session_key": "libvirt",
-    "provisioner_config": ["storage_pool", "network_name"]
+    "provisioner_config": ["storage_pool", "wan_interface"]
   }
 }

@@ -40,53 +40,30 @@
 
         <div class="form-section">
             <h3>Network</h3>
+            <p class="form-help">
+                VMs use NAT via libvirt's default network.
+                IPv6 is routed end-to-end via WireGuard tunnel.
+            </p>
+            {% if detected.wan_interfaces|length > 1 %}
             <div class="form-group">
-                <label for="network_mode">Network mode</label>
-                <select id="network_mode" name="network_mode">
-                    <option value="bridge">Linux bridge (for external access)</option>
-                    <option value="nat">NAT (libvirt default network)</option>
-                </select>
-            </div>
-            <div class="form-group" id="bridge-config">
-                <label for="bridge_interface">Bridge interface</label>
-                <select id="bridge_interface" name="bridge_interface">
-                    {% for br in detected.bridges %}
-                    <option value="{{ br }}">{{ br }}</option>
+                <label for="wan_interface">WAN interface</label>
+                <select id="wan_interface" name="wan_interface">
+                    {% for iface in detected.wan_interfaces %}
+                    <option value="{{ iface }}">{{ iface }}</option>
                     {% endfor %}
-                    <option value="">Manual entry...</option>
                 </select>
             </div>
-            <div class="form-group" id="nat-config" style="display:none">
-                <label for="network_name">libvirt network name</label>
-                <input type="text" id="network_name" name="network_name"
-                       value="blockhost">
-            </div>
-        </div>
-
-        <div class="form-section">
-            <h3>IP Pool</h3>
+            {% elif detected.wan_interfaces|length == 1 %}
+            <input type="hidden" name="wan_interface" value="{{ detected.wan_interfaces[0] }}">
             <div class="form-group">
-                <label for="ip_network">Network (CIDR)</label>
-                <input type="text" id="ip_network" name="ip_network"
-                       placeholder="192.168.122.0/24" required>
+                <label>WAN interface</label>
+                <span class="form-static">{{ detected.wan_interfaces[0] }}</span>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="ip_start">Start IP</label>
-                    <input type="text" id="ip_start" name="ip_start"
-                           placeholder="192.168.122.100" required>
-                </div>
-                <div class="form-group">
-                    <label for="ip_end">End IP</label>
-                    <input type="text" id="ip_end" name="ip_end"
-                           placeholder="192.168.122.200" required>
-                </div>
+            {% else %}
+            <div class="alert alert-warning">
+                No WAN interface detected (no default route found).
             </div>
-            <div class="form-group">
-                <label for="gateway">Gateway</label>
-                <input type="text" id="gateway" name="gateway"
-                       placeholder="192.168.122.1" required>
-            </div>
+            {% endif %}
         </div>
 
         <div class="form-section">
@@ -104,13 +81,4 @@
         </div>
     </form>
 </div>
-
-<script>
-document.getElementById('network_mode').addEventListener('change', function() {
-    document.getElementById('bridge-config').style.display =
-        this.value === 'bridge' ? '' : 'none';
-    document.getElementById('nat-config').style.display =
-        this.value === 'nat' ? '' : 'none';
-});
-</script>
 {% endblock %}

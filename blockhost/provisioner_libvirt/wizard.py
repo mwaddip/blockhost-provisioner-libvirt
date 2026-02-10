@@ -9,6 +9,7 @@ Provides:
 
 import os
 import subprocess
+import xml.etree.ElementTree as ET
 from typing import Optional
 
 from flask import Blueprint, redirect, render_template, request, session, url_for
@@ -29,17 +30,23 @@ def wizard_libvirt():
     detected = _detect_libvirt_resources()
 
     if request.method == "POST":
+        # Query actual DHCP range from the default network if libvirtd is running
+        dhcp = detected.get("default_network_dhcp", {})
+        ip_network = dhcp.get("network", "192.168.122.0/24")
+        ip_start = dhcp.get("start", "192.168.122.2")
+        ip_end = dhcp.get("end", "192.168.122.254")
+        gateway = dhcp.get("gateway", "192.168.122.1")
+
         session["libvirt"] = {
             "storage_pool": request.form.get("storage_pool", "blockhost"),
             "storage_path": request.form.get("storage_path", "/var/lib/blockhost/vms"),
-            "network_mode": request.form.get("network_mode", "bridge"),
-            "network_name": request.form.get("network_name", ""),
-            "bridge_interface": request.form.get("bridge_interface", ""),
-            "template_url": request.form.get("template_url", ""),
-            "ip_network": request.form.get("ip_network"),
-            "ip_start": request.form.get("ip_start"),
-            "ip_end": request.form.get("ip_end"),
-            "gateway": request.form.get("gateway"),
+            "network_mode": "nat",
+            "network_name": "default",
+            "wan_interface": request.form.get("wan_interface", ""),
+            "ip_network": ip_network,
+            "ip_start": ip_start,
+            "ip_end": ip_end,
+            "gateway": gateway,
             "gc_grace_days": int(request.form.get("gc_grace_days", 7)),
         }
         return redirect(url_for("wizard_ipv6"))
@@ -56,10 +63,7 @@ def get_summary_data(session_data: dict) -> dict:
     return {
         "storage_pool": libvirt.get("storage_pool"),
         "storage_path": libvirt.get("storage_path"),
-        "network_mode": libvirt.get("network_mode"),
-        "network_name": libvirt.get("network_name"),
-        "ip_start": libvirt.get("ip_start"),
-        "ip_end": libvirt.get("ip_end"),
+        "wan_interface": libvirt.get("wan_interface"),
         "gc_grace_days": libvirt.get("gc_grace_days", 7),
     }
 
@@ -94,9 +98,9 @@ def finalize_storage(config: dict) -> tuple[bool, Optional[str]]:
     Creates a directory-based storage pool at the configured path.
     Idempotent: if the pool already exists and is active, succeeds immediately.
     """
-    libvirt = config.get("libvirt", {})
-    pool_name = libvirt.get("storage_pool", "blockhost")
-    pool_path = libvirt.get("storage_path", "/var/lib/blockhost/vms")
+    provisioner = config.get("provisioner", {})
+    pool_name = provisioner.get("storage_pool", "blockhost")
+    pool_path = provisioner.get("storage_path", "/var/lib/blockhost/vms")
 
     try:
         # Check if pool already exists
@@ -157,39 +161,15 @@ def finalize_storage(config: dict) -> tuple[bool, Optional[str]]:
 
 
 def finalize_network(config: dict) -> tuple[bool, Optional[str]]:
-    """Create or verify the network configuration.
-
-    Depending on network_mode:
-    - "bridge": Verify the Linux bridge exists
-    - "nat": Verify the libvirt default network is active
-    """
-    libvirt = config.get("libvirt", {})
-    network_mode = libvirt.get("network_mode", "bridge")
-
-    if network_mode == "bridge":
-        bridge = libvirt.get("bridge_interface", "")
-        if not bridge:
-            return (False, "No bridge interface specified")
-
-        # Verify bridge exists
-        result = subprocess.run(
-            ["ip", "link", "show", bridge],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            return (False, f"Bridge interface '{bridge}' not found")
-
-        return (True, None)
-
-    # NAT mode: verify the libvirt network exists and is active
-    net_name = libvirt.get("network_name", "default")
+    """Verify and activate the libvirt default NAT network."""
+    net_name = "default"
 
     result = subprocess.run(
         ["virsh", "net-info", net_name],
         capture_output=True, text=True, timeout=10,
     )
     if result.returncode != 0:
-        return (False, f"libvirt network '{net_name}' not found. Create it or switch to bridge mode.")
+        return (False, f"libvirt network '{net_name}' not found. Is libvirt installed correctly?")
 
     # Ensure it's started
     if "inactive" in result.stdout.lower():
@@ -241,14 +221,58 @@ def finalize_template(config: dict) -> tuple[bool, Optional[str]]:
 # --- Helper Functions ---
 
 
+def _get_default_network_dhcp() -> dict:
+    """Parse the default libvirt network XML for DHCP range and gateway.
+
+    Returns dict with keys: network, start, end, gateway.
+    Returns empty dict on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["virsh", "net-dumpxml", "default"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return {}
+
+        root = ET.fromstring(result.stdout)
+        ip_elem = root.find(".//ip")
+        if ip_elem is None:
+            return {}
+
+        address = ip_elem.get("address", "192.168.122.1")
+        netmask = ip_elem.get("netmask", "255.255.255.0")
+
+        # Convert netmask to CIDR prefix length
+        import ipaddress
+        network = ipaddress.IPv4Network(f"{address}/{netmask}", strict=False)
+
+        dhcp_range = ip_elem.find("dhcp/range")
+        if dhcp_range is not None:
+            start = dhcp_range.get("start", "")
+            end = dhcp_range.get("end", "")
+        else:
+            start = ""
+            end = ""
+
+        return {
+            "network": str(network),
+            "gateway": address,
+            "start": start,
+            "end": end,
+        }
+    except Exception:
+        return {}
+
+
 def _detect_libvirt_resources() -> dict:
     """Auto-detect libvirt configuration for form defaults."""
     detected = {
         "kvm_available": os.path.exists("/dev/kvm"),
         "libvirtd_running": False,
         "storage_pools": [],
-        "networks": [],
-        "bridges": [],
+        "wan_interfaces": [],
+        "default_network_dhcp": {},
     }
 
     # Check libvirtd
@@ -274,32 +298,25 @@ def _detect_libvirt_resources() -> dict:
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
 
-    # List existing networks
+    # Detect WAN interface(s) — the one(s) with a default route
     try:
         result = subprocess.run(
-            ["virsh", "net-list", "--name"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            detected["networks"] = [
-                n.strip() for n in result.stdout.strip().split("\n") if n.strip()
-            ]
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-
-    # List Linux bridges
-    try:
-        result = subprocess.run(
-            ["ip", "-o", "link", "show", "type", "bridge"],
+            ["ip", "route", "show", "default"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
             for line in result.stdout.strip().split("\n"):
-                if line.strip():
-                    parts = line.split(":")
-                    if len(parts) >= 2:
-                        detected["bridges"].append(parts[1].strip())
+                parts = line.split()
+                try:
+                    dev_idx = parts.index("dev")
+                    detected["wan_interfaces"].append(parts[dev_idx + 1])
+                except (ValueError, IndexError):
+                    pass
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
+
+    # Detect default network DHCP range
+    if detected["libvirtd_running"]:
+        detected["default_network_dhcp"] = _get_default_network_dhcp()
 
     return detected

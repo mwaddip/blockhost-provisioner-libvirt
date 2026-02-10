@@ -183,62 +183,6 @@ def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, network
     """)
 
 
-def generate_domain_xml_bridge(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name):
-    """Generate domain XML using a Linux bridge instead of a libvirt network."""
-    return textwrap.dedent(f"""\
-    <domain type='kvm'>
-      <name>{name}</name>
-      <memory unit='MiB'>{memory_mb}</memory>
-      <vcpu placement='static'>{cpu}</vcpu>
-      <os>
-        <type arch='x86_64' machine='q35'>hvm</type>
-        <boot dev='hd'/>
-      </os>
-      <cpu mode='host-model' check='partial'/>
-      <features>
-        <acpi/>
-        <apic/>
-      </features>
-      <clock offset='utc'>
-        <timer name='rtc' tickpolicy='catchup'/>
-        <timer name='pit' tickpolicy='delay'/>
-        <timer name='hpet' present='no'/>
-      </clock>
-      <on_poweroff>destroy</on_poweroff>
-      <on_reboot>restart</on_reboot>
-      <on_crash>destroy</on_crash>
-      <devices>
-        <disk type='file' device='disk'>
-          <driver name='qemu' type='qcow2' cache='none' io='native' discard='unmap'/>
-          <source file='{disk_path}'/>
-          <target dev='vda' bus='virtio'/>
-        </disk>
-        <disk type='file' device='cdrom'>
-          <driver name='qemu' type='raw'/>
-          <source file='{cloud_init_iso}'/>
-          <target dev='sda' bus='sata'/>
-          <readonly/>
-        </disk>
-        <interface type='bridge'>
-          <source bridge='{bridge_name}'/>
-          <model type='virtio'/>
-        </interface>
-        <serial type='pty'>
-          <target port='0'/>
-        </serial>
-        <console type='pty'>
-          <target type='serial' port='0'/>
-        </console>
-        <channel type='unix'>
-          <target type='virtio' name='org.qemu.guest_agent.0'/>
-        </channel>
-        <rng model='virtio'>
-          <backend model='random'>/dev/urandom</backend>
-        </rng>
-      </devices>
-    </domain>
-    """)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Create a BlockHost VM on libvirt/KVM")
@@ -284,9 +228,7 @@ def main():
         err("WARNING: broker allocation not available, IPv6 will be empty")
 
     # Provisioner-specific config from db.yaml
-    network_name = db_config.get("network_name", "default")
-    network_mode = db_config.get("network_mode", "nat")
-    bridge_interface = db_config.get("bridge_interface", "")
+    network_name = "default"
 
     # --- Validate prerequisites ---
 
@@ -434,16 +376,10 @@ def main():
     xml_dir = Path("/var/lib/blockhost/vms")
     xml_path = xml_dir / f"{args.name}.xml"
 
-    if network_mode == "bridge" and bridge_interface:
-        domain_xml = generate_domain_xml_bridge(
-            args.name, args.cpu, args.memory, str(disk_path),
-            str(ci_iso_path), bridge_interface,
-        )
-    else:
-        domain_xml = generate_domain_xml(
-            args.name, args.cpu, args.memory, str(disk_path),
-            str(ci_iso_path), network_name,
-        )
+    domain_xml = generate_domain_xml(
+        args.name, args.cpu, args.memory, str(disk_path),
+        str(ci_iso_path), network_name,
+    )
 
     xml_path.write_text(domain_xml)
 
@@ -473,10 +409,8 @@ def main():
     if ipv6:
         try:
             from blockhost.root_agent import call
-            # Determine the route device: bridge name or default libvirt bridge
-            route_dev = bridge_interface if (network_mode == "bridge" and bridge_interface) else "virbr0"
-            call("ip6-route-add", address=f"{ipv6}/128", dev=route_dev)
-            err(f"IPv6 route added: {ipv6}/128 via {route_dev}")
+            call("ip6-route-add", address=f"{ipv6}/128", dev="virbr0")
+            err(f"IPv6 route added: {ipv6}/128 via virbr0")
         except Exception as e:
             # Non-fatal — VM works without IPv6 route
             err(f"WARNING: Failed to add IPv6 route: {e}")
