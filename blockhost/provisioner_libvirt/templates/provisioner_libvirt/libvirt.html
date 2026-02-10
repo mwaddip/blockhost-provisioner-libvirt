@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% from "macros/wizard_steps.html" import step_bar %}
 
-{% block title %}libvirt/KVM Configuration{% endblock %}
+{% block title %}libvirt/KVM Configuration - BlockHost Installer{% endblock %}
 
 {% block content %}
-{{ step_bar(current_step='libvirt') }}
+{{ step_bar('libvirt') }}
 
 <div class="card">
     <h2>libvirt/KVM Configuration</h2>
-    <p>Configure the libvirt hypervisor for VM provisioning.</p>
+    <p class="text-muted mb-2">Configure the libvirt hypervisor for VM provisioning.</p>
 
     {% if not detected.kvm_available %}
     <div class="alert alert-warning">
@@ -40,7 +40,7 @@
 
         <div class="form-section">
             <h3>Network</h3>
-            <p class="form-help">
+            <p class="text-muted mb-2" style="font-size: 0.875rem;">
                 VMs use NAT via libvirt's default network.
                 IPv6 is routed end-to-end via WireGuard tunnel.
             </p>
@@ -57,7 +57,7 @@
             <input type="hidden" name="wan_interface" value="{{ detected.wan_interfaces[0] }}">
             <div class="form-group">
                 <label>WAN interface</label>
-                <span class="form-static">{{ detected.wan_interfaces[0] }}</span>
+                <input type="text" value="{{ detected.wan_interfaces[0] }}" disabled readonly>
             </div>
             {% else %}
             <div class="alert alert-warning">
