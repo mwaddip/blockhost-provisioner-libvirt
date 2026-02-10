@@ -116,6 +116,46 @@ def _cleanup_partial(allocated):
             pass
 
 
+def _get_on_chain_total_supply():
+    """Query the NFT contract's totalSupply() via cast (foundry).
+
+    Returns the total number of minted tokens as int, or None on failure.
+    Used as a floor for local token ID reservation to avoid collisions
+    with tokens that already exist on-chain.
+    """
+    env_path = Path("/opt/blockhost/.env")
+    if not env_path.exists():
+        return None
+
+    env = {}
+    try:
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            env[key.strip()] = val.strip().strip('"').strip("'")
+    except OSError:
+        return None
+
+    contract = env.get("NFT_CONTRACT_ADDRESS", "")
+    rpc_url = env.get("RPC_URL", "")
+    if not contract or not rpc_url:
+        return None
+
+    try:
+        result = subprocess.run(
+            ["cast", "call", contract, "totalSupply()(uint256)", "--rpc-url", rpc_url],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+        pass
+
+    return None
+
+
 def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name):
     """Generate libvirt domain XML for a BlockHost VM.
 
@@ -278,8 +318,14 @@ def main():
     else:
         err("No IPv6 allocated (broker unavailable or pool exhausted)")
 
-    # Reserve NFT token ID
-    nft_token_id = db.reserve_nft_token_id(args.name)
+    # Reserve NFT token ID — query on-chain totalSupply as floor
+    on_chain_supply = _get_on_chain_total_supply()
+    if on_chain_supply is not None:
+        err(f"On-chain totalSupply: {on_chain_supply}")
+        nft_token_id = db.reserve_nft_token_id(args.name, token_id=on_chain_supply)
+    else:
+        err("Could not query on-chain totalSupply, using local-only reservation")
+        nft_token_id = db.reserve_nft_token_id(args.name)
     allocated["nft_token_id"] = nft_token_id
     err(f"Reserved NFT token ID: {nft_token_id}")
 
