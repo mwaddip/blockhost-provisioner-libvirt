@@ -433,7 +433,7 @@ def main():
     try:
         vm_record = db.register_vm(
             name=args.name,
-            vmid=args.name,  # libvirt uses domain name as ID
+            vmid=0,  # libvirt doesn't use numeric VMIDs
             ip=ip,
             ipv6=ipv6,
             owner=args.owner_wallet,
