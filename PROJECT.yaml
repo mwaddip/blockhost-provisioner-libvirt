@@ -38,7 +38,8 @@ entry_points:
       Generates MAC address (QEMU OUI 52:54:00), used in both domain XML
       and cloud-init network-config for static IP via MAC match.
       Queries on-chain totalSupply via cast for NFT token ID floor.
-      Gateway derived from bridge IP, fallback to db.yaml gateway key.
+      Gateway from libvirt network XML, fallback to bridge IP / db.yaml.
+      IPv6 default route via broker prefix gateway (link-scoped host route).
     args:
       - name: name
         type: positional
@@ -78,6 +79,10 @@ entry_points:
       - name: --public-secret
         type: string
         description: Public secret for signature verification
+      - name: --username
+        type: string
+        default: admin
+        description: VM login username
       - name: --expiry-days
         type: int
         default: 30

@@ -46,7 +46,7 @@ from pathlib import Path
 TEMPLATE_IMAGE = Path("/var/lib/blockhost/templates/blockhost-base.qcow2")
 VM_DISK_DIR = Path("/var/lib/blockhost/vms")
 CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
-USERNAME = "user"
+DEFAULT_USERNAME = "admin"
 
 
 def err(msg):
@@ -293,6 +293,7 @@ def main():
     parser.add_argument("--no-mint", action="store_true", help="Skip NFT minting (engine handles it)")
     parser.add_argument("--user-signature", help="User signature for encrypted credentials")
     parser.add_argument("--public-secret", help="Public secret for signature verification")
+    parser.add_argument("--username", default=DEFAULT_USERNAME, help=f"VM login username (default: {DEFAULT_USERNAME})")
     parser.add_argument("--expiry-days", type=int, default=30, help="Days until VM expires (default: 30)")
     parser.add_argument("--mock", action="store_true", help="Use mock database")
 
@@ -393,7 +394,7 @@ def main():
             "ipv6": ipv6,
             "vmid": args.name,
             "nft_token_id": nft_token_id,
-            "username": USERNAME,
+            "username": args.username,
         }))
         sys.exit(0)
 
@@ -436,7 +437,7 @@ def main():
                 "VM_IP": ip,
                 "VM_IPV6": ipv6,
                 "SIGNING_HOST": signing_host,
-                "USERNAME": USERNAME,
+                "USERNAME": args.username,
                 "NFT_TOKEN_ID": str(nft_token_id),
                 "CHAIN_ID": str(blockchain.get("chain_id", "")),
                 "NFT_CONTRACT": blockchain.get("nft_contract", ""),
@@ -468,6 +469,15 @@ def main():
     if ipv6:
         addresses_lines += f"      - {ipv6}/128\n"
 
+    # Derive IPv6 gateway from broker prefix (network + 1 = host's tunnel address)
+    ipv6_gateway = ""
+    if broker and ipv6:
+        try:
+            prefix = ipaddress.IPv6Network(broker["prefix"], strict=False)
+            ipv6_gateway = str(prefix.network_address + 1)
+        except (KeyError, ValueError):
+            pass
+
     network_config = (
         f"version: 2\n"
         f"ethernets:\n"
@@ -481,6 +491,14 @@ def main():
         f"      addresses:\n"
         f"        - {gateway}\n"
     )
+    if ipv6_gateway:
+        network_config += (
+            f"    routes:\n"
+            f'      - to: "{ipv6_gateway}/128"\n'
+            f"        scope: link\n"
+            f'      - to: "::/0"\n'
+            f'        via: "{ipv6_gateway}"\n'
+        )
     network_config_path.write_text(network_config)
 
     # Generate cloud-init ISO via cloud-localds
@@ -588,7 +606,7 @@ def main():
         "ipv6": ipv6,
         "vmid": args.name,
         "nft_token_id": nft_token_id,
-        "username": USERNAME,
+        "username": args.username,
     }))
     sys.exit(0)
 
