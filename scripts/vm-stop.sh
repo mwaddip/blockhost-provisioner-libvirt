@@ -14,9 +14,18 @@ fi
 
 VM_NAME="$1"
 
-# TODO: Implement via root agent client
-# virsh shutdown (graceful, ACPI signal)
-# blockhost-root-agent-client '{"action":"virsh-shutdown","params":{"domain":"'"$VM_NAME"'"}}'
+echo "Stopping VM (graceful ACPI shutdown): $VM_NAME" >&2
 
-echo "ERROR: not yet implemented" >&2
-exit 1
+RESULT=$(python3 -c "
+from blockhost.root_agent import call
+r = call('virsh-shutdown', domain='$VM_NAME')
+if not r.get('ok'):
+    raise SystemExit(r.get('error', 'unknown error'))
+print(r.get('output', ''))
+") || {
+    echo "Failed to stop VM: $VM_NAME" >&2
+    exit 1
+}
+
+echo "Shutdown signal sent: $VM_NAME"
+exit 0

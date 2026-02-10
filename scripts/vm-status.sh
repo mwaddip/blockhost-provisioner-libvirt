@@ -15,13 +15,23 @@ fi
 
 VM_NAME="$1"
 
-# TODO: Implement status check
-# Map libvirt states to blockhost states:
-#   running       → active
-#   paused        → suspended
-#   shut off      → suspended (or destroyed if undefine'd)
-#   not found     → destroyed
-#   anything else → unknown
+# Query libvirt domain state. virsh domstate exits non-zero if the domain
+# doesn't exist, which we handle as "destroyed".
+STATE=$(virsh domstate "$VM_NAME" 2>/dev/null) || {
+    echo "destroyed"
+    exit 0
+}
 
-echo "unknown"
+case "$STATE" in
+    running)
+        echo "active"
+        ;;
+    "shut off"|paused|pmsuspended)
+        echo "suspended"
+        ;;
+    *)
+        echo "unknown"
+        ;;
+esac
+
 exit 0

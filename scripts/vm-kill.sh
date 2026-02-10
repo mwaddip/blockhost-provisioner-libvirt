@@ -14,9 +14,23 @@ fi
 
 VM_NAME="$1"
 
-# TODO: Implement via root agent client
-# virsh destroy (force stop, confusing name but that's libvirt for you)
-# blockhost-root-agent-client '{"action":"virsh-destroy","params":{"domain":"'"$VM_NAME"'"}}'
+echo "Force-stopping VM: $VM_NAME" >&2
 
-echo "ERROR: not yet implemented" >&2
-exit 1
+RESULT=$(python3 -c "
+from blockhost.root_agent import call
+r = call('virsh-destroy', domain='$VM_NAME')
+if not r.get('ok'):
+    # 'domain is not running' is not an error for kill
+    err = r.get('error', '')
+    if 'not running' in err or 'not found' in err:
+        print('VM already stopped')
+        raise SystemExit(0)
+    raise SystemExit(err or 'unknown error')
+print(r.get('output', ''))
+") || {
+    echo "Failed to kill VM: $VM_NAME" >&2
+    exit 1
+}
+
+echo "VM force-stopped: $VM_NAME"
+exit 0

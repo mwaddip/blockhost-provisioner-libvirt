@@ -14,8 +14,18 @@ fi
 
 VM_NAME="$1"
 
-# TODO: Implement via root agent client
-# blockhost-root-agent-client '{"action":"virsh-start","params":{"domain":"'"$VM_NAME"'"}}'
+echo "Starting VM: $VM_NAME" >&2
 
-echo "ERROR: not yet implemented" >&2
-exit 1
+RESULT=$(python3 -c "
+from blockhost.root_agent import call
+r = call('virsh-start', domain='$VM_NAME')
+if not r.get('ok'):
+    raise SystemExit(r.get('error', 'unknown error'))
+print(r.get('output', ''))
+") || {
+    echo "Failed to start VM: $VM_NAME" >&2
+    exit 1
+}
+
+echo "VM started: $VM_NAME"
+exit 0

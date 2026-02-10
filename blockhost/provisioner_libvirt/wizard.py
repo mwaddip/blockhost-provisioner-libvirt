@@ -92,18 +92,68 @@ def finalize_storage(config: dict) -> tuple[bool, Optional[str]]:
     """Create or verify the libvirt storage pool.
 
     Creates a directory-based storage pool at the configured path.
+    Idempotent: if the pool already exists and is active, succeeds immediately.
     """
-    # TODO: Implement storage pool creation
-    # 1. Check if pool already exists (virsh pool-info)
-    # 2. If not: define pool XML, build, start, autostart
-    # 3. Verify pool is active
-    #
-    # virsh pool-define-as blockhost dir --target /var/lib/blockhost/vms
-    # virsh pool-build blockhost
-    # virsh pool-start blockhost
-    # virsh pool-autostart blockhost
+    libvirt = config.get("libvirt", {})
+    pool_name = libvirt.get("storage_pool", "blockhost")
+    pool_path = libvirt.get("storage_path", "/var/lib/blockhost/vms")
 
-    return (False, "not yet implemented")
+    try:
+        # Check if pool already exists
+        result = subprocess.run(
+            ["virsh", "pool-info", pool_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        pool_exists = result.returncode == 0
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        return (False, f"Cannot query libvirt pools: {e}")
+
+    if not pool_exists:
+        # Create directory
+        os.makedirs(pool_path, mode=0o750, exist_ok=True)
+
+        # Define the pool
+        result = subprocess.run(
+            ["virsh", "pool-define-as", pool_name, "dir", "--target", pool_path],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return (False, f"pool-define-as failed: {result.stderr.strip()}")
+
+        # Build the pool (creates the directory structure)
+        result = subprocess.run(
+            ["virsh", "pool-build", pool_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return (False, f"pool-build failed: {result.stderr.strip()}")
+
+    # Ensure pool is started
+    result = subprocess.run(
+        ["virsh", "pool-info", pool_name],
+        capture_output=True, text=True, timeout=10,
+    )
+    if "inactive" in result.stdout.lower() or "State:" not in result.stdout:
+        subprocess.run(
+            ["virsh", "pool-start", pool_name],
+            capture_output=True, text=True, timeout=10,
+        )
+
+    # Ensure pool autostarts
+    subprocess.run(
+        ["virsh", "pool-autostart", pool_name],
+        capture_output=True, text=True, timeout=10,
+    )
+
+    # Verify pool is active
+    result = subprocess.run(
+        ["virsh", "pool-info", pool_name],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0 or "running" not in result.stdout.lower():
+        return (False, f"Storage pool '{pool_name}' is not active after setup")
+
+    return (True, None)
 
 
 def finalize_network(config: dict) -> tuple[bool, Optional[str]]:
@@ -111,25 +161,81 @@ def finalize_network(config: dict) -> tuple[bool, Optional[str]]:
 
     Depending on network_mode:
     - "bridge": Verify the Linux bridge exists
-    - "nat": Create a libvirt NAT network
+    - "nat": Verify the libvirt default network is active
     """
-    # TODO: Implement network configuration
-    # Bridge mode: verify bridge interface exists (ip link show <bridge>)
-    # NAT mode: define libvirt network XML, start, autostart
+    libvirt = config.get("libvirt", {})
+    network_mode = libvirt.get("network_mode", "bridge")
 
-    return (False, "not yet implemented")
+    if network_mode == "bridge":
+        bridge = libvirt.get("bridge_interface", "")
+        if not bridge:
+            return (False, "No bridge interface specified")
+
+        # Verify bridge exists
+        result = subprocess.run(
+            ["ip", "link", "show", bridge],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return (False, f"Bridge interface '{bridge}' not found")
+
+        return (True, None)
+
+    # NAT mode: verify the libvirt network exists and is active
+    net_name = libvirt.get("network_name", "default")
+
+    result = subprocess.run(
+        ["virsh", "net-info", net_name],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        return (False, f"libvirt network '{net_name}' not found. Create it or switch to bridge mode.")
+
+    # Ensure it's started
+    if "inactive" in result.stdout.lower():
+        subprocess.run(
+            ["virsh", "net-start", net_name],
+            capture_output=True, text=True, timeout=10,
+        )
+
+    # Ensure autostart
+    subprocess.run(
+        ["virsh", "net-autostart", net_name],
+        capture_output=True, text=True, timeout=10,
+    )
+
+    # Verify active
+    result = subprocess.run(
+        ["virsh", "net-info", net_name],
+        capture_output=True, text=True, timeout=10,
+    )
+    if "active" not in result.stdout.lower():
+        return (False, f"libvirt network '{net_name}' could not be activated")
+
+    return (True, None)
 
 
 def finalize_template(config: dict) -> tuple[bool, Optional[str]]:
     """Build the VM template image.
 
     Runs blockhost-build-template which downloads a cloud image
-    and customizes it with libguestfs.
+    and customizes it with libguestfs. This can take several minutes
+    on first run (downloading ~700MB cloud image + customization).
     """
-    # TODO: Implement template build
-    # subprocess.run(['blockhost-build-template'], check=True)
-
-    return (False, "not yet implemented")
+    try:
+        result = subprocess.run(
+            ["blockhost-build-template"],
+            capture_output=True, text=True,
+            timeout=1800,  # 30 min — image download + customize can be slow
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            return (False, f"Template build failed: {stderr[-500:] if len(stderr) > 500 else stderr}")
+        return (True, None)
+    except subprocess.TimeoutExpired:
+        return (False, "Template build timed out (30 minutes)")
+    except FileNotFoundError:
+        return (False, "blockhost-build-template command not found")
 
 
 # --- Helper Functions ---

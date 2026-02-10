@@ -32,7 +32,7 @@ manifest:
 entry_points:
   blockhost-vm-create:
     source: scripts/vm-create.py
-    status: stub
+    status: implemented
     args:
       - name: name
         type: positional
@@ -88,37 +88,37 @@ entry_points:
 
   blockhost-vm-destroy:
     source: scripts/vm-destroy.sh
-    status: stub
+    status: implemented
     args: ["name"]
     notes: Must be idempotent
 
   blockhost-vm-start:
     source: scripts/vm-start.sh
-    status: stub
+    status: implemented
     args: ["name"]
 
   blockhost-vm-stop:
     source: scripts/vm-stop.sh
-    status: stub
+    status: implemented
     args: ["name"]
     notes: Graceful ACPI shutdown
 
   blockhost-vm-kill:
     source: scripts/vm-kill.sh
-    status: stub
+    status: implemented
     args: ["name"]
     notes: Force stop (virsh destroy)
 
   blockhost-vm-status:
     source: scripts/vm-status.sh
-    status: stub
+    status: implemented
     args: ["name"]
     output: "active|suspended|destroyed|unknown"
     notes: Exit 0 always
 
   blockhost-vm-list:
     source: scripts/vm-list.sh
-    status: stub
+    status: implemented
     args: ["--format json"]
     output: Tab-separated or JSON array
 
@@ -143,7 +143,7 @@ entry_points:
 
   blockhost-build-template:
     source: scripts/build-template.sh
-    status: stub
+    status: implemented
     notes: Builds qcow2 base image with libguestfs
 
   blockhost-provisioner-detect:
@@ -186,12 +186,15 @@ wizard:
     - id: storage
       display: "Configure storage pool"
       function: finalize_storage
+      status: implemented
     - id: network
       display: "Configure network"
       function: finalize_network
+      status: implemented
     - id: template
       display: "Build VM template"
       function: finalize_template
+      status: implemented
 
 first_boot_hook:
   path: provisioner-hooks/first-boot.sh
@@ -216,7 +219,7 @@ config_keys:
     - network_name
   files_read:
     - path: /etc/blockhost/db.yaml
-      keys: [storage_pool, network_name, ip_pool, grace_days]
+      keys: [storage_pool, network_name, network_mode, bridge_interface, ip_pool, grace_days]
     - path: /etc/blockhost/web3-defaults.yaml
       keys: [rpc_url, nft_contract, deployer_key_path]
     - path: /etc/blockhost/broker-allocation.json
