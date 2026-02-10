@@ -245,8 +245,6 @@ def main():
         st = d.stat()
         d.chmod(st.st_mode | 0o005)  # add o+rx
 
-    # Template backing file must be readable by libvirt-qemu
-    os.chmod(TEMPLATE_IMAGE, 0o644)
 
     disk_path = VM_DISK_DIR / f"{args.name}.qcow2"
     if disk_path.exists():
