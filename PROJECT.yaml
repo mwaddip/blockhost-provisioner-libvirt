@@ -33,7 +33,12 @@ entry_points:
   blockhost-vm-create:
     source: scripts/vm-create.py
     status: implemented
-    notes: Bridge mode (Linux bridge from first-boot), IPv6 routed via bridge
+    notes: >
+      Bridge mode (Linux bridge from first-boot), IPv6 routed via bridge.
+      Generates MAC address (QEMU OUI 52:54:00), used in both domain XML
+      and cloud-init network-config for static IP via MAC match.
+      Queries on-chain totalSupply via cast for NFT token ID floor.
+      Gateway derived from bridge IP, fallback to db.yaml gateway key.
     args:
       - name: name
         type: positional
@@ -231,11 +236,14 @@ config_keys:
     - storage_pool
   files_read:
     - path: /etc/blockhost/db.yaml
-      keys: [storage_pool, bridge, ip_pool, grace_days]
+      keys: [storage_pool, bridge, gateway, ip_pool, grace_days]
     - path: /etc/blockhost/web3-defaults.yaml
       keys: [rpc_url, nft_contract, deployer_key_path]
     - path: /etc/blockhost/broker-allocation.json
       keys: [ipv6_prefix, gateway]
+    - path: /opt/blockhost/.env
+      keys: [NFT_CONTRACT, SEPOLIA_RPC]
+      used_by: vm-create (totalSupply query)
 
 paths:
   template_image: /var/lib/blockhost/templates/blockhost-base.qcow2

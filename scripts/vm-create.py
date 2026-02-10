@@ -30,8 +30,11 @@ cleanup on failure can undo partial work.
 """
 
 import argparse
+import ipaddress
 import json
 import os
+import random
+import secrets
 import subprocess
 import sys
 import textwrap
@@ -156,7 +159,36 @@ def _get_on_chain_total_supply():
     return None
 
 
-def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name):
+def _generate_mac():
+    """Generate a random MAC address in the QEMU/KVM OUI range (52:54:00:xx:xx:xx)."""
+    return "52:54:00:{:02x}:{:02x}:{:02x}".format(
+        random.randint(0, 255), random.randint(0, 255), random.randint(0, 255),
+    )
+
+
+def _get_bridge_gateway(bridge_name):
+    """Get the IPv4 address of the bridge interface (used as gateway for VMs).
+
+    Returns the IP string or None if not found.
+    """
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", "dev", bridge_name, "scope", "global"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.strip().splitlines():
+            # Format: "N: dev    inet A.B.C.D/prefix ..."
+            parts = line.split()
+            for i, part in enumerate(parts):
+                if part == "inet" and i + 1 < len(parts):
+                    return parts[i + 1].split("/")[0]
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
+def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name,
+                        mac_address):
     """Generate libvirt domain XML for a BlockHost VM.
 
     Design choices for a production multi-tenant hosting environment:
@@ -206,6 +238,7 @@ def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_
           <readonly/>
         </disk>
         <interface type='bridge'>
+          <mac address='{mac_address}'/>
           <source bridge='{bridge_name}'/>
           <model type='virtio'/>
         </interface>
@@ -354,6 +387,11 @@ def main():
     user_data_path = ci_dir / "user-data"
     ci_iso_path = ci_dir / "cidata.iso"
 
+    # Generate MAC address for this VM (used in both domain XML and network-config)
+    mac_address = _generate_mac()
+    allocated["mac_address"] = mac_address
+    err(f"Generated MAC: {mac_address}")
+
     if args.cloud_init_content:
         # Use pre-rendered cloud-init from caller
         with open(args.cloud_init_content, "r") as f:
@@ -364,11 +402,14 @@ def main():
             from blockhost.cloud_init import render_cloud_init
 
             blockchain = web3_config.get("blockchain", {})
-            signing = web3_config.get("signing_page", {})
             auth = web3_config.get("auth", {})
 
-            # Derive signing host from allocated IP
-            signing_host = f"{ip}:{signing.get('port', 8080)}"
+            # Signing host: IPv6 (public) preferred, fall back to IPv4
+            # IPv6 addresses must be wrapped in brackets for URLs
+            if ipv6:
+                signing_host = f"[{ipv6}]"
+            else:
+                signing_host = ip
 
             variables = {
                 "VM_NAME": args.name,
@@ -382,7 +423,7 @@ def main():
                 "RPC_URL": blockchain.get("rpc_url", ""),
                 "OTP_LENGTH": str(auth.get("otp_length", 6)),
                 "OTP_TTL": str(auth.get("otp_ttl_seconds", 300)),
-                "SECRET_KEY": args.public_secret or "",
+                "SECRET_KEY": secrets.token_hex(32),
                 "SSH_KEYS": "",
             }
 
@@ -393,10 +434,38 @@ def main():
     # Write user-data file
     user_data_path.write_text(user_data)
 
+    # Write network-config for static IP assignment
+    network_config_path = ci_dir / "network-config"
+    gateway = _get_bridge_gateway(bridge_name)
+    if not gateway:
+        gateway = db_config.get("gateway", "")
+    if not gateway:
+        fail("Cannot determine gateway (no IP on bridge, no gateway in db.yaml)", allocated)
+
+    addresses_lines = f"      - {ip}/24\n"
+    if ipv6:
+        addresses_lines += f"      - {ipv6}/128\n"
+
+    network_config = (
+        f"version: 2\n"
+        f"ethernets:\n"
+        f"  id0:\n"
+        f"    match:\n"
+        f'      macaddress: "{mac_address}"\n'
+        f"    addresses:\n"
+        f"{addresses_lines}"
+        f"    gateway4: {gateway}\n"
+        f"    nameservers:\n"
+        f"      addresses:\n"
+        f"        - {gateway}\n"
+    )
+    network_config_path.write_text(network_config)
+
     # Generate cloud-init ISO via cloud-localds
     try:
         subprocess.run(
-            ["cloud-localds", str(ci_iso_path), str(user_data_path)],
+            ["cloud-localds", str(ci_iso_path), str(user_data_path),
+             "--network-config", str(network_config_path)],
             check=True,
             capture_output=True,
             text=True,
@@ -435,7 +504,7 @@ def main():
 
     domain_xml = generate_domain_xml(
         args.name, args.cpu, args.memory, str(disk_path),
-        str(ci_iso_path), bridge_name,
+        str(ci_iso_path), bridge_name, mac_address,
     )
 
     xml_path.write_text(domain_xml)
