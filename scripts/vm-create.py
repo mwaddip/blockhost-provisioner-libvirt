@@ -166,6 +166,26 @@ def _generate_mac():
     )
 
 
+def _get_libvirt_network_gateway(network_name="default"):
+    """Get gateway IP from the libvirt network XML (where dnsmasq runs).
+
+    Returns the IP string or None if not found.
+    """
+    try:
+        import re
+        result = subprocess.run(
+            ["virsh", "net-dumpxml", network_name],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            match = re.search(r"<ip\s+address='([^']+)'", result.stdout)
+            if match:
+                return match.group(1)
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
 def _get_bridge_gateway(bridge_name):
     """Get the IPv4 address of the bridge interface (used as gateway for VMs).
 
@@ -436,7 +456,9 @@ def main():
 
     # Write network-config for static IP assignment
     network_config_path = ci_dir / "network-config"
-    gateway = _get_bridge_gateway(bridge_name)
+    gateway = _get_libvirt_network_gateway()
+    if not gateway:
+        gateway = _get_bridge_gateway(bridge_name)
     if not gateway:
         gateway = db_config.get("gateway", "")
     if not gateway:
