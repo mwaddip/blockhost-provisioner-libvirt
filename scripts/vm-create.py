@@ -115,7 +115,7 @@ def _cleanup_partial(allocated):
             pass
 
 
-def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, network_name):
+def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name):
     """Generate libvirt domain XML for a BlockHost VM.
 
     Design choices for a production multi-tenant hosting environment:
@@ -126,6 +126,8 @@ def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, network
       double-caching with qcow2 metadata. Safe for data integrity on crash.
     - discard='unmap': guest TRIM/discard propagates to host, keeps sparse
       overlays from growing unbounded. Essential for CoW disk efficiency.
+    - bridge interface: VMs attach to the host's Linux bridge (created by
+      first-boot) for direct L2 access to the physical network.
     - serial console: allows 'virsh console' for debugging without VNC
     """
     return textwrap.dedent(f"""\
@@ -162,8 +164,8 @@ def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, network
           <target dev='sda' bus='sata'/>
           <readonly/>
         </disk>
-        <interface type='network'>
-          <source network='{network_name}'/>
+        <interface type='bridge'>
+          <source bridge='{bridge_name}'/>
           <model type='virtio'/>
         </interface>
         <serial type='pty'>
@@ -227,8 +229,8 @@ def main():
     except Exception:
         err("WARNING: broker allocation not available, IPv6 will be empty")
 
-    # Provisioner-specific config from db.yaml
-    network_name = "default"
+    # Bridge name from db.yaml (written by main repo's first-boot)
+    bridge_name = db_config.get("bridge", "br0")
 
     # --- Validate prerequisites ---
 
@@ -378,7 +380,7 @@ def main():
 
     domain_xml = generate_domain_xml(
         args.name, args.cpu, args.memory, str(disk_path),
-        str(ci_iso_path), network_name,
+        str(ci_iso_path), bridge_name,
     )
 
     xml_path.write_text(domain_xml)
@@ -409,8 +411,8 @@ def main():
     if ipv6:
         try:
             from blockhost.root_agent import call
-            call("ip6-route-add", address=f"{ipv6}/128", dev="virbr0")
-            err(f"IPv6 route added: {ipv6}/128 via virbr0")
+            call("ip6-route-add", address=f"{ipv6}/128", dev=bridge_name)
+            err(f"IPv6 route added: {ipv6}/128 via {bridge_name}")
         except Exception as e:
             # Non-fatal — VM works without IPv6 route
             err(f"WARNING: Failed to add IPv6 route: {e}")

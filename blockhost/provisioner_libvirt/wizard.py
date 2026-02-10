@@ -10,6 +10,7 @@ Provides:
 import os
 import subprocess
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import Optional
 
 from flask import Blueprint, redirect, render_template, request, session, url_for
@@ -40,8 +41,6 @@ def wizard_libvirt():
         session["libvirt"] = {
             "storage_pool": request.form.get("storage_pool", "blockhost"),
             "storage_path": request.form.get("storage_path", "/var/lib/blockhost/vms"),
-            "network_mode": "nat",
-            "network_name": "default",
             "wan_interface": request.form.get("wan_interface", ""),
             "ip_network": ip_network,
             "ip_start": ip_start,
@@ -161,36 +160,42 @@ def finalize_storage(config: dict) -> tuple[bool, Optional[str]]:
 
 
 def finalize_network(config: dict) -> tuple[bool, Optional[str]]:
-    """Verify and activate the libvirt default NAT network."""
-    net_name = "default"
+    """Discover Linux bridge and disable the default NAT network.
 
-    result = subprocess.run(
-        ["virsh", "net-info", net_name],
-        capture_output=True, text=True, timeout=10,
-    )
-    if result.returncode != 0:
-        return (False, f"libvirt network '{net_name}' not found. Is libvirt installed correctly?")
+    The main repo creates a Linux bridge (br0) during first-boot and stores
+    the name in /run/blockhost/bridge. VMs attach directly to this bridge.
+    The libvirt default NAT network is disabled to avoid virbr0 subnet collisions.
+    """
+    bridge_name = _discover_bridge()
+    if not bridge_name:
+        return (False, "No Linux bridge found. "
+                "Expected /run/blockhost/bridge or a bridge with a global IPv4.")
 
-    # Ensure it's started
-    if "inactive" in result.stdout.lower():
-        subprocess.run(
-            ["virsh", "net-start", net_name],
-            capture_output=True, text=True, timeout=10,
+    # Verify bridge has an IP address
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "addr", "show", "dev", bridge_name],
+            capture_output=True, text=True, timeout=5,
         )
+        if "inet " not in result.stdout:
+            return (False, f"Bridge '{bridge_name}' has no IPv4 address")
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        return (False, f"Cannot check bridge '{bridge_name}': {e}")
 
-    # Ensure autostart
+    # Disable default NAT network to avoid virbr0 subnet collisions
     subprocess.run(
-        ["virsh", "net-autostart", net_name],
-        capture_output=True, text=True, timeout=10,
+        ["virsh", "net-destroy", "default"],
+        capture_output=True, timeout=10,
+    )
+    subprocess.run(
+        ["virsh", "net-autostart", "default", "--disable"],
+        capture_output=True, timeout=10,
     )
 
-    # Verify active
-    result = subprocess.run(
-        ["virsh", "net-info", net_name],
-        capture_output=True, text=True, timeout=10,
-    )
-    if "active" not in result.stdout.lower():
-        return (False, f"libvirt network '{net_name}' could not be activated")
+    # Store bridge name in config for later use
+    provisioner = config.get("provisioner", {})
+    provisioner["bridge"] = bridge_name
+    config["provisioner"] = provisioner
 
     return (True, None)
 
@@ -219,6 +224,36 @@ def finalize_template(config: dict) -> tuple[bool, Optional[str]]:
 
 
 # --- Helper Functions ---
+
+
+def _discover_bridge() -> Optional[str]:
+    """Find the Linux bridge to use for VM networking.
+
+    1. Read /run/blockhost/bridge (written by first-boot)
+    2. Fallback: scan /sys/class/net/*/bridge for any bridge with a global IPv4
+    """
+    # Canonical location written by first-boot
+    bridge_file = Path("/run/blockhost/bridge")
+    if bridge_file.exists():
+        name = bridge_file.read_text().strip()
+        if name:
+            return name
+
+    # Fallback: find any bridge with a global IPv4 address
+    try:
+        net_dir = Path("/sys/class/net")
+        for iface in sorted(net_dir.iterdir()):
+            if (iface / "bridge").is_dir():
+                result = subprocess.run(
+                    ["ip", "-4", "addr", "show", "dev", iface.name, "scope", "global"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if "inet " in result.stdout:
+                    return iface.name
+    except Exception:
+        pass
+
+    return None
 
 
 def _get_default_network_dhcp() -> dict:

@@ -33,7 +33,7 @@ entry_points:
   blockhost-vm-create:
     source: scripts/vm-create.py
     status: implemented
-    notes: NAT mode only (libvirt default network), IPv6 via virbr0
+    notes: Bridge mode (Linux bridge from first-boot), IPv6 routed via bridge
     args:
       - name: name
         type: positional
@@ -217,10 +217,9 @@ config_keys:
   session_key: libvirt
   provisioner_config:
     - storage_pool
-    - wan_interface
   files_read:
     - path: /etc/blockhost/db.yaml
-      keys: [storage_pool, wan_interface, ip_pool, grace_days]
+      keys: [storage_pool, bridge, ip_pool, grace_days]
     - path: /etc/blockhost/web3-defaults.yaml
       keys: [rpc_url, nft_contract, deployer_key_path]
     - path: /etc/blockhost/broker-allocation.json
