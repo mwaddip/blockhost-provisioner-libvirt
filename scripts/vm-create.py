@@ -138,8 +138,8 @@ def _get_on_chain_total_supply():
     except OSError:
         return None
 
-    contract = env.get("NFT_CONTRACT_ADDRESS", "")
-    rpc_url = env.get("RPC_URL", "")
+    contract = env.get("NFT_CONTRACT", "")
+    rpc_url = env.get("SEPOLIA_RPC", "")
     if not contract or not rpc_url:
         return None
 
