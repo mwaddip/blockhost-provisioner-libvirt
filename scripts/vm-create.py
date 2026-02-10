@@ -199,6 +199,7 @@ def main():
     parser.add_argument("--no-mint", action="store_true", help="Skip NFT minting (engine handles it)")
     parser.add_argument("--user-signature", help="User signature for encrypted credentials")
     parser.add_argument("--public-secret", help="Public secret for signature verification")
+    parser.add_argument("--expiry-days", type=int, default=30, help="Days until VM expires (default: 30)")
     parser.add_argument("--mock", action="store_true", help="Use mock database")
 
     args = parser.parse_args()
@@ -426,7 +427,7 @@ def main():
             ip=ip,
             ipv6=ipv6,
             owner=args.owner_wallet,
-            expiry_days=db_config.get("default_expiry_days", 30),
+            expiry_days=args.expiry_days,
             wallet_address=args.owner_wallet,
         )
         err("VM registered in database.")

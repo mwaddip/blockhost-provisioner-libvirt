@@ -73,6 +73,10 @@ entry_points:
       - name: --public-secret
         type: string
         description: Public secret for signature verification
+      - name: --expiry-days
+        type: int
+        default: 30
+        description: Days until VM expires
       - name: --mock
         type: flag
         description: Use mock database
