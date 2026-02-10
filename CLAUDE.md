@@ -11,7 +11,6 @@
 | Path pattern | Profile | Extra focus areas |
 |---|---|---|
 | `scripts/vm-gc.py` | S8 P6 E9 C4 I6 A5 L8 | Robustness (destroys resources), reliability (must be idempotent), edge cases (cleanup failures = data loss) |
-| `scripts/mint_nft.py` | S7 P8 E7 C4 I6 A6 L7 | Security (permanent chain writes, key handling) |
 | `scripts/build-template.sh` | S7 P6 E8 C4 I5 A5 L6 | Reliability (must be idempotent, runs once) |
 | `root-agent-actions/` | S8 P9 E7 C4 I8 A6 L7 | Security (privilege boundary, root commands) |
 | everything else | S9 P7 E9 C6 I7 A7 L7 | Robustness + reliability (VM lifecycle is unforgiving) |
@@ -79,7 +78,6 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 | `scripts/vm-list.sh` | List all VMs |
 | `scripts/vm-gc.py` | Garbage collection for expired VMs |
 | `scripts/vm-resume.py` | Resume a suspended VM |
-| `scripts/mint_nft.py` | NFT minting via Foundry cast |
 | `scripts/build-template.sh` | qcow2 template builder |
 | `scripts/provisioner-detect.sh` | Detect libvirt/KVM host |
 | `blockhost/provisioner_libvirt/wizard.py` | Wizard plugin (Blueprint, finalization, summary) |

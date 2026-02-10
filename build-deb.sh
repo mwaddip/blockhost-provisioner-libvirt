@@ -54,7 +54,6 @@ Description: libvirt/KVM VM provisioning with NFT-based web3 authentication
   - blockhost-vm-list: List all VMs
   - blockhost-vm-gc: Garbage collect expired VMs
   - blockhost-vm-resume: Resume a suspended VM
-  - blockhost-mint-nft: Mint access credential NFTs
   - blockhost-build-template: Build qcow2 VM template
   - blockhost-provisioner-detect: Detect libvirt/KVM host
   - Provisioner manifest for engine integration
@@ -131,7 +130,6 @@ cp "${SCRIPT_DIR}/scripts/vm-metrics.sh" "${PKG}/usr/bin/blockhost-vm-metrics"
 cp "${SCRIPT_DIR}/scripts/vm-throttle.sh" "${PKG}/usr/bin/blockhost-vm-throttle"
 cp "${SCRIPT_DIR}/scripts/vm-gc.py" "${PKG}/usr/bin/blockhost-vm-gc"
 cp "${SCRIPT_DIR}/scripts/vm-resume.py" "${PKG}/usr/bin/blockhost-vm-resume"
-cp "${SCRIPT_DIR}/scripts/mint_nft.py" "${PKG}/usr/bin/blockhost-mint-nft"
 cp "${SCRIPT_DIR}/scripts/build-template.sh" "${PKG}/usr/bin/blockhost-build-template"
 cp "${SCRIPT_DIR}/scripts/provisioner-detect.sh" "${PKG}/usr/bin/blockhost-provisioner-detect"
 
@@ -155,7 +153,6 @@ cp "${SCRIPT_DIR}/root-agent-actions/virsh.py" "${PKG}/usr/share/blockhost/root-
 
 # Install Python modules
 cp "${SCRIPT_DIR}/scripts/vm-create.py" "${PKG}/usr/lib/python3/dist-packages/blockhost/vm_creator.py"
-cp "${SCRIPT_DIR}/scripts/mint_nft.py" "${PKG}/usr/lib/python3/dist-packages/blockhost/mint_nft.py"
 
 # Install provisioner wizard plugin
 WIZARD_PKG_DIR="${PKG}/usr/lib/python3/dist-packages/blockhost/provisioner_libvirt"

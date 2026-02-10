@@ -146,11 +146,6 @@ entry_points:
     status: stub
     notes: Builds qcow2 base image with libguestfs
 
-  blockhost-mint-nft:
-    source: scripts/mint_nft.py
-    status: stub
-    args: ["--owner-wallet", "--machine-id", "--user-encrypted", "--public-secret", "--dry-run"]
-
   blockhost-provisioner-detect:
     source: scripts/provisioner-detect.sh
     status: implemented
