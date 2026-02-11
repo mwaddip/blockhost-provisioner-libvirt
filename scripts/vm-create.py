@@ -142,7 +142,7 @@ def _get_on_chain_total_supply():
         return None
 
     contract = env.get("NFT_CONTRACT", "")
-    rpc_url = env.get("SEPOLIA_RPC", "")
+    rpc_url = env.get("RPC_URL", "")
     if not contract or not rpc_url:
         return None
 

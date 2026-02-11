@@ -247,7 +247,7 @@ config_keys:
     - path: /etc/blockhost/broker-allocation.json
       keys: [ipv6_prefix, gateway]
     - path: /opt/blockhost/.env
-      keys: [NFT_CONTRACT, SEPOLIA_RPC]
+      keys: [NFT_CONTRACT, RPC_URL]
       used_by: vm-create (totalSupply query)
 
 paths:
