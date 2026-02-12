@@ -425,9 +425,15 @@ def main():
             blockchain = web3_config.get("blockchain", {})
             auth = web3_config.get("auth", {})
 
-            # Signing host: IPv6 (public) preferred, fall back to IPv4
-            # IPv6 addresses must be wrapped in brackets for URLs
-            if ipv6:
+            # Derive FQDN from broker DNS zone if available
+            # Broker DNS maps {hex_offset}.{dns_zone} → {prefix}::{hex_offset}
+            signing_domain = ""
+            if broker and broker.get("dns_zone") and ipv6:
+                prefix_net = ipaddress.IPv6Network(broker["prefix"], strict=False)
+                offset = int(ipaddress.IPv6Address(ipv6)) - int(prefix_net.network_address)
+                signing_domain = f"{offset:x}.{broker['dns_zone']}"
+                signing_host = signing_domain
+            elif ipv6:
                 signing_host = f"[{ipv6}]"
             else:
                 signing_host = ip
@@ -437,6 +443,7 @@ def main():
                 "VM_IP": ip,
                 "VM_IPV6": ipv6,
                 "SIGNING_HOST": signing_host,
+                "SIGNING_DOMAIN": signing_domain,
                 "USERNAME": args.username,
                 "NFT_TOKEN_ID": str(nft_token_id),
                 "CHAIN_ID": str(blockchain.get("chain_id", "")),

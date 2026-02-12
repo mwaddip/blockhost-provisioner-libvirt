@@ -245,7 +245,7 @@ config_keys:
     - path: /etc/blockhost/web3-defaults.yaml
       keys: [rpc_url, nft_contract, deployer_key_path]
     - path: /etc/blockhost/broker-allocation.json
-      keys: [ipv6_prefix, gateway]
+      keys: [prefix, gateway, dns_zone]
     - path: /opt/blockhost/.env
       keys: [NFT_CONTRACT, RPC_URL]
       used_by: vm-create (totalSupply query)
