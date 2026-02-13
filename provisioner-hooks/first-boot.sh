@@ -28,11 +28,13 @@ STEP_LIBVIRT="${STATE_DIR}/.step-libvirt"
 if [ ! -f "$STEP_LIBVIRT" ]; then
     log "Installing libvirt/KVM stack..."
 
-    # Configure apt proxy if available
-    APT_PROXY="http://192.168.122.1:3142"
-    if curl -s --connect-timeout 2 "$APT_PROXY" >/dev/null 2>&1; then
+    # Use apt proxy if configured by ISO builder
+    APT_PROXY=""
+    if [ -f /etc/apt/apt.conf.d/00proxy ]; then
+        APT_PROXY=$(grep -oP 'Acquire::http::Proxy "\K[^"]+' /etc/apt/apt.conf.d/00proxy || true)
+    fi
+    if [ -n "$APT_PROXY" ] && curl -s --connect-timeout 2 "$APT_PROXY" >/dev/null 2>&1; then
         log "Using apt proxy: $APT_PROXY"
-        echo "Acquire::http::Proxy \"$APT_PROXY\";" > /etc/apt/apt.conf.d/00proxy
     fi
 
     apt-get update
