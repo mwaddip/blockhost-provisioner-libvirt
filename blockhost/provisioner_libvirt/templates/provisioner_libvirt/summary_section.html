@@ -2,18 +2,18 @@
     <h3>libvirt/KVM</h3>
     <div class="summary-item">
         <span class="summary-label">Storage pool</span>
-        <span class="summary-value">{{ provisioner.storage_pool }}</span>
+        <span class="summary-value">{{ provisioner_summary.storage_pool }}</span>
     </div>
     <div class="summary-item">
         <span class="summary-label">Storage path</span>
-        <span class="summary-value">{{ provisioner.storage_path }}</span>
+        <span class="summary-value">{{ provisioner_summary.storage_path }}</span>
     </div>
     <div class="summary-item">
         <span class="summary-label">WAN interface</span>
-        <span class="summary-value">{{ provisioner.wan_interface or '—' }}</span>
+        <span class="summary-value">{{ provisioner_summary.wan_interface or '—' }}</span>
     </div>
     <div class="summary-item">
         <span class="summary-label">GC grace period</span>
-        <span class="summary-value">{{ provisioner.gc_grace_days }} days</span>
+        <span class="summary-value">{{ provisioner_summary.gc_grace_days }} days</span>
     </div>
 </div>
