@@ -426,11 +426,11 @@ def main():
             auth = web3_config.get("auth", {})
 
             # Derive FQDN from broker DNS zone if available
-            # Broker DNS maps {hex_offset}.{dns_zone} → {prefix}::{hex_offset}
+            # Broker DNS maps {N}.{dns_zone} → {/64 prefix}::{N}
+            # N = lower 64 bits of IPv6 (the interface identifier), in hex
             signing_domain = ""
             if broker and broker.get("dns_zone") and ipv6:
-                prefix_net = ipaddress.IPv6Network(broker["prefix"], strict=False)
-                offset = int(ipaddress.IPv6Address(ipv6)) - int(prefix_net.network_address)
+                offset = int(ipaddress.IPv6Address(ipv6)) & ((1 << 64) - 1)
                 signing_domain = f"{offset:x}.{broker['dns_zone']}"
                 signing_host = signing_domain
             elif ipv6:
