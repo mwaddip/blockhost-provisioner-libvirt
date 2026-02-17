@@ -148,6 +148,27 @@ entry_points:
     status: stub
     args: ["name", "--extend-days N", "--mock", "--dry-run"]
 
+  blockhost-vm-update-gecos:
+    source: scripts/vm-update-gecos.py
+    status: implemented
+    notes: >
+      Updates VM user GECOS field via QEMU guest agent.
+      Called by engine reconciler on NFT ownership transfer.
+      VM must be running with responsive guest agent.
+    args:
+      - name: name
+        type: positional
+        required: true
+        description: VM name (libvirt domain name)
+      - name: wallet_address
+        type: positional
+        required: true
+        description: New owner wallet address
+      - name: --nft-id
+        type: string
+        required: true
+        description: NFT token ID
+
   blockhost-vm-metrics:
     source: scripts/vm-metrics.sh
     status: stub
@@ -190,6 +211,10 @@ root_agent_actions:
     virsh-undefine:
       params: {domain: string, remove_storage: bool}
       runs: "virsh undefine <domain> [--remove-all-storage]"
+    virsh-update-gecos:
+      params: {domain: string, username: string, gecos: string}
+      runs: "virsh qemu-agent-command <domain> (guest-exec usermod -c <gecos> <username>)"
+      notes: Purpose-built action, validates username and GECOS format
 
 wizard:
   module: blockhost.provisioner_libvirt.wizard
@@ -243,7 +268,7 @@ config_keys:
     - path: /etc/blockhost/db.yaml
       keys: [storage_pool, bridge, gateway, ip_pool, grace_days]
     - path: /etc/blockhost/web3-defaults.yaml
-      keys: [rpc_url, nft_contract, deployer_key_path]
+      keys: [auth.otp_length, auth.otp_ttl_seconds]
     - path: /etc/blockhost/broker-allocation.json
       keys: [prefix, gateway, dns_zone]
     - path: /opt/blockhost/.env

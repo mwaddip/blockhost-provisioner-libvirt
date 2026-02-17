@@ -422,7 +422,6 @@ def main():
         try:
             from blockhost.cloud_init import render_cloud_init
 
-            blockchain = web3_config.get("blockchain", {})
             auth = web3_config.get("auth", {})
 
             # Derive FQDN from broker DNS zone if available
@@ -446,9 +445,7 @@ def main():
                 "SIGNING_DOMAIN": signing_domain,
                 "USERNAME": args.username,
                 "NFT_TOKEN_ID": str(nft_token_id),
-                "CHAIN_ID": str(blockchain.get("chain_id", "")),
-                "NFT_CONTRACT": blockchain.get("nft_contract", ""),
-                "RPC_URL": blockchain.get("rpc_url", ""),
+                "WALLET_ADDRESS": args.owner_wallet,
                 "OTP_LENGTH": str(auth.get("otp_length", 6)),
                 "OTP_TTL": str(auth.get("otp_ttl_seconds", 300)),
                 "SECRET_KEY": secrets.token_hex(32),

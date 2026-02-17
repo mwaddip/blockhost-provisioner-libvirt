@@ -78,6 +78,7 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 | `scripts/vm-list.sh` | List all VMs |
 | `scripts/vm-gc.py` | Garbage collection for expired VMs |
 | `scripts/vm-resume.py` | Resume a suspended VM |
+| `scripts/vm-update-gecos.py` | Update VM GECOS field via QEMU guest agent |
 | `scripts/build-template.sh` | qcow2 template builder |
 | `scripts/provisioner-detect.sh` | Detect libvirt/KVM host |
 | `blockhost/provisioner_libvirt/wizard.py` | Wizard plugin (Blueprint, finalization, summary) |

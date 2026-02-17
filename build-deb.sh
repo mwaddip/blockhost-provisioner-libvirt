@@ -54,6 +54,7 @@ Description: libvirt/KVM VM provisioning with NFT-based web3 authentication
   - blockhost-vm-list: List all VMs
   - blockhost-vm-gc: Garbage collect expired VMs
   - blockhost-vm-resume: Resume a suspended VM
+  - blockhost-vm-update-gecos: Update VM GECOS field
   - blockhost-build-template: Build qcow2 VM template
   - blockhost-provisioner-detect: Detect libvirt/KVM host
   - Provisioner manifest for engine integration
@@ -131,6 +132,7 @@ cp "${SCRIPT_DIR}/scripts/vm-throttle.sh" "${PKG}/usr/bin/blockhost-vm-throttle"
 cp "${SCRIPT_DIR}/scripts/vm-gc.py" "${PKG}/usr/bin/blockhost-vm-gc"
 cp "${SCRIPT_DIR}/scripts/vm-resume.py" "${PKG}/usr/bin/blockhost-vm-resume"
 cp "${SCRIPT_DIR}/scripts/build-template.sh" "${PKG}/usr/bin/blockhost-build-template"
+cp "${SCRIPT_DIR}/scripts/vm-update-gecos.py" "${PKG}/usr/bin/blockhost-vm-update-gecos"
 cp "${SCRIPT_DIR}/scripts/provisioner-detect.sh" "${PKG}/usr/bin/blockhost-provisioner-detect"
 
 chmod 755 "${PKG}/usr/bin/"blockhost-*
