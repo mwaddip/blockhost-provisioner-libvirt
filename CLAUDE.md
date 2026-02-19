@@ -108,7 +108,7 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 
 Test with mock database:
 ```bash
-python3 scripts/vm-create.py test-vm --owner-wallet 0x1234... --mock --skip-mint
+python3 scripts/vm-create.py test-vm --owner-wallet 0x1234... --nft-token-id 1 --mock
 ```
 
 ## Pre-Push Documentation Check

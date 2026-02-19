@@ -6,7 +6,7 @@ Implements the BlockHost provisioner contract using `virsh` + `cloud-init` inste
 
 ## Status
 
-**Scaffolded.** All contract interfaces are wired up (manifest, CLI stubs, wizard plugin, root agent actions, first-boot hook). Implementation of the actual VM lifecycle commands is in progress.
+**Core implemented.** VM create/destroy/start/stop/kill/status/list, wizard, root agent actions, and first-boot hook are working. GC, resume, metrics, and throttle are stubs. The engine owns the full NFT lifecycle; the provisioner receives `--nft-token-id` from the engine and bakes it into cloud-init.
 
 ## Prerequisites
 

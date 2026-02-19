@@ -37,7 +37,8 @@ entry_points:
       Bridge mode (Linux bridge from first-boot), IPv6 routed via bridge.
       Generates MAC address (QEMU OUI 52:54:00), used in both domain XML
       and cloud-init network-config for static IP via MAC match.
-      Queries on-chain totalSupply via cast for NFT token ID floor.
+      NFT token ID passed in by engine (--nft-token-id); provisioner does not
+      query chain or reserve IDs.
       Gateway from libvirt network XML, fallback to bridge IP / db.yaml.
       IPv6 default route via broker prefix gateway (link-scoped host route).
     args:
@@ -49,6 +50,10 @@ entry_points:
         type: string
         required: true
         description: Owner wallet address (0x...)
+      - name: --nft-token-id
+        type: int
+        required: true
+        description: NFT token ID (reserved by engine)
       - name: --cpu
         type: int
         default: 1
@@ -67,18 +72,6 @@ entry_points:
       - name: --cloud-init-content
         type: path
         description: Path to pre-rendered cloud-init YAML
-      - name: --skip-mint
-        type: flag
-        description: Skip NFT minting
-      - name: --no-mint
-        type: flag
-        description: Skip minting (engine handles it)
-      - name: --user-signature
-        type: string
-        description: User signature for encrypted credentials
-      - name: --public-secret
-        type: string
-        description: Public secret for signature verification
       - name: --username
         type: string
         default: admin
@@ -271,9 +264,6 @@ config_keys:
       keys: [auth.otp_length, auth.otp_ttl_seconds]
     - path: /etc/blockhost/broker-allocation.json
       keys: [prefix, gateway, dns_zone]
-    - path: /opt/blockhost/.env
-      keys: [NFT_CONTRACT, RPC_URL]
-      used_by: vm-create (totalSupply query)
 
 paths:
   template_image: /var/lib/blockhost/templates/blockhost-base.qcow2

@@ -3,12 +3,11 @@
 blockhost-vm-create — Create a VM on libvirt/KVM with cloud-init.
 
 Contract:
-  blockhost-vm-create <name> --owner-wallet <0x>
+  blockhost-vm-create <name> --owner-wallet <0x> --nft-token-id <int>
+      [--expiry-days N]
       [--cpu N] [--memory N] [--disk N]
       [--apply]
       [--cloud-init-content <path>]
-      [--skip-mint] [--no-mint]
-      [--user-signature <hex> --public-secret <str>]
       [--mock]
 
   stdout (JSON on success):
@@ -111,52 +110,6 @@ def _cleanup_partial(allocated):
         except Exception:
             pass
 
-    # Mark NFT reservation as failed
-    if allocated.get("nft_token_id") and allocated.get("db"):
-        try:
-            allocated["db"].mark_nft_failed(allocated["nft_token_id"])
-        except Exception:
-            pass
-
-
-def _get_on_chain_total_supply():
-    """Query the NFT contract's totalSupply() via cast (foundry).
-
-    Returns the total number of minted tokens as int, or None on failure.
-    Used as a floor for local token ID reservation to avoid collisions
-    with tokens that already exist on-chain.
-    """
-    env_path = Path("/opt/blockhost/.env")
-    if not env_path.exists():
-        return None
-
-    env = {}
-    try:
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip('"').strip("'")
-    except OSError:
-        return None
-
-    contract = env.get("NFT_CONTRACT", "")
-    rpc_url = env.get("RPC_URL", "")
-    if not contract or not rpc_url:
-        return None
-
-    try:
-        result = subprocess.run(
-            ["cast", "call", contract, "totalSupply()(uint256)", "--rpc-url", rpc_url],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip())
-    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
-        pass
-
-    return None
 
 
 def _generate_mac():
@@ -289,10 +242,8 @@ def main():
     parser.add_argument("--disk", type=int, default=20, help="Disk size in GB")
     parser.add_argument("--apply", action="store_true", help="Actually create the VM (dry-run without)")
     parser.add_argument("--cloud-init-content", help="Path to pre-rendered cloud-init YAML")
-    parser.add_argument("--skip-mint", action="store_true", help="Skip NFT minting")
-    parser.add_argument("--no-mint", action="store_true", help="Skip NFT minting (engine handles it)")
-    parser.add_argument("--user-signature", help="User signature for encrypted credentials")
-    parser.add_argument("--public-secret", help="Public secret for signature verification")
+    parser.add_argument("--nft-token-id", type=int, required=True,
+                        help="NFT token ID (reserved by engine)")
     parser.add_argument("--username", default=DEFAULT_USERNAME, help=f"VM login username (default: {DEFAULT_USERNAME})")
     parser.add_argument("--expiry-days", type=int, default=30, help="Days until VM expires (default: 30)")
     parser.add_argument("--mock", action="store_true", help="Use mock database")
@@ -372,16 +323,9 @@ def main():
     else:
         err("No IPv6 allocated (broker unavailable or pool exhausted)")
 
-    # Reserve NFT token ID — query on-chain totalSupply as floor
-    on_chain_supply = _get_on_chain_total_supply()
-    if on_chain_supply is not None:
-        err(f"On-chain totalSupply: {on_chain_supply}")
-        nft_token_id = db.reserve_nft_token_id(args.name, token_id=on_chain_supply)
-    else:
-        err("Could not query on-chain totalSupply, using local-only reservation")
-        nft_token_id = db.reserve_nft_token_id(args.name)
-    allocated["nft_token_id"] = nft_token_id
-    err(f"Reserved NFT token ID: {nft_token_id}")
+    # Token ID comes from the engine (already reserved on-chain)
+    nft_token_id = args.nft_token_id
+    err(f"Using NFT token ID: {nft_token_id}")
 
     # --- Dry-run exit point ---
 
