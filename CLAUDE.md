@@ -32,7 +32,7 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 **Dependencies:**
 - `blockhost-common` — Provides `blockhost.config`, `blockhost.vm_db`, `blockhost.root_agent`, `blockhost.cloud_init` modules
 - `blockhost-broker` — IPv6 tunnel broker (broker-client saves allocation to `/etc/blockhost/broker-allocation.json`)
-- `libpam-web3-tools` — Provides signing page HTML and `pam_web3_tool` CLI
+- `blockhost-engine` — Provides `nft_tool` CLI (replaces `pam_web3_tool`)
 
 ## Interface Contracts (REFERENCE)
 

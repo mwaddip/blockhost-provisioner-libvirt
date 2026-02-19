@@ -87,10 +87,10 @@ qemu-img resize "$TEMPLATE_STAGING" 4G
 
 # --- Locate libpam-web3 .deb ---
 
-LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3-tools_*.deb' -print -quit 2>/dev/null || true)
+LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3_*.deb' -print -quit 2>/dev/null || true)
 if [ -z "$LIBPAM_DEB" ]; then
-    # Also check for the older package name
-    LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3_*.deb' -print -quit 2>/dev/null || true)
+    # Also check for the older package name (deprecated)
+    LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3-tools_*.deb' -print -quit 2>/dev/null || true)
 fi
 
 CUSTOMIZE_ARGS=()

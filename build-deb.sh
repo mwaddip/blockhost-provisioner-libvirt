@@ -33,7 +33,7 @@ Version: 0.2.0
 Section: admin
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), blockhost-common (>= 0.1.0), libpam-web3-tools (>= 0.5.0)
+Depends: python3 (>= 3.10), blockhost-common (>= 0.1.0)
 Recommends: qemu-kvm, libvirt-daemon-system, libvirt-clients, virtinst, cloud-image-utils
 Suggests: libguestfs-tools
 Conflicts: blockhost-provisioner-proxmox

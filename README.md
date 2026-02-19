@@ -12,7 +12,7 @@ Implements the BlockHost provisioner contract using `virsh` + `cloud-init` inste
 
 - Debian 12 (Bookworm) host with KVM support
 - `blockhost-common` package installed
-- `libpam-web3-tools` package installed
+- `blockhost-engine` package installed (provides `nft_tool`)
 
 ## Package
 
