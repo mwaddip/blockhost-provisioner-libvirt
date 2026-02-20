@@ -16,9 +16,10 @@ VM_NAME="$1"
 
 echo "Starting VM: $VM_NAME" >&2
 
-RESULT=$(python3 -c "
+RESULT=$(VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.root_agent import call
-r = call('virsh-start', domain='$VM_NAME')
+r = call('virsh-start', domain=os.environ['VM_NAME'])
 if not r.get('ok'):
     raise SystemExit(r.get('error', 'unknown error'))
 print(r.get('output', ''))

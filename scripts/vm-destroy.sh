@@ -35,9 +35,11 @@ log "Stopping domain (if running)..."
 if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
     STATE=$(virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown")
     if [ "$STATE" = "running" ]; then
-        python3 -c "
+        VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.root_agent import call
-r = call('virsh-destroy', domain='$VM_NAME')
+name = os.environ['VM_NAME']
+r = call('virsh-destroy', domain=name)
 if not r.get('ok') and 'not running' not in r.get('error', ''):
     print('WARNING: force-stop failed: ' + r.get('error', 'unknown'))
 " 2>&1 | while read -r line; do log "$line"; done
@@ -52,9 +54,11 @@ fi
 
 log "Removing domain definition..."
 if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
-    python3 -c "
+    VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.root_agent import call
-r = call('virsh-undefine', domain='$VM_NAME', remove_storage=True)
+name = os.environ['VM_NAME']
+r = call('virsh-undefine', domain=name, remove_storage=True)
 if not r.get('ok'):
     print('WARNING: undefine failed: ' + r.get('error', 'unknown'))
     raise SystemExit(1)
@@ -62,9 +66,11 @@ if not r.get('ok'):
     if [ $? -ne 0 ]; then
         # Try without --remove-all-storage as fallback
         log "Retrying undefine without storage removal..."
-        python3 -c "
+        VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.root_agent import call
-r = call('virsh-undefine', domain='$VM_NAME', remove_storage=False)
+name = os.environ['VM_NAME']
+r = call('virsh-undefine', domain=name, remove_storage=False)
 if not r.get('ok'):
     print('ERROR: undefine failed: ' + r.get('error', 'unknown'))
     raise SystemExit(1)
@@ -94,12 +100,14 @@ fi
 # --- Step 5: Update database ---
 
 log "Updating database..."
-python3 -c "
+VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.vm_db import get_database
+name = os.environ['VM_NAME']
 db = get_database()
-vm = db.get_vm('$VM_NAME')
+vm = db.get_vm(name)
 if vm and vm.get('status') != 'destroyed':
-    db.mark_destroyed('$VM_NAME')
+    db.mark_destroyed(name)
     print('Database record marked destroyed.')
 elif vm:
     print('Already marked destroyed in database.')

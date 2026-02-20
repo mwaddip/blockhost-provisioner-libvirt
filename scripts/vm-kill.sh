@@ -16,9 +16,10 @@ VM_NAME="$1"
 
 echo "Force-stopping VM: $VM_NAME" >&2
 
-RESULT=$(python3 -c "
+RESULT=$(VM_NAME="$VM_NAME" python3 -c "
+import os
 from blockhost.root_agent import call
-r = call('virsh-destroy', domain='$VM_NAME')
+r = call('virsh-destroy', domain=os.environ['VM_NAME'])
 if not r.get('ok'):
     # 'domain is not running' is not an error for kill
     err = r.get('error', '')

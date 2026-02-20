@@ -15,14 +15,14 @@ fi
 
 # Query database for managed VMs and cross-reference with virsh domstate.
 # Uses Python because the database API is Python-only.
-python3 -c "
-import json, subprocess, sys
+BH_FORMAT="$FORMAT" python3 -c "
+import json, os, subprocess, sys
 
 from blockhost.vm_db import get_database
 
 db = get_database()
 vms = db.list_vms()
-fmt = '$FORMAT'
+fmt = os.environ['BH_FORMAT']
 
 results = []
 for vm in vms:
