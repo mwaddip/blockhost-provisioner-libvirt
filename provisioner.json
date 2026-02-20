@@ -1,6 +1,6 @@
 {
   "name": "libvirt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "display_name": "libvirt/KVM + cloud-init",
 
   "commands": {

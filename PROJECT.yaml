@@ -2,7 +2,7 @@
 # Keep this in sync with the codebase at all times.
 
 name: blockhost-provisioner-libvirt
-version: "0.1.0"
+version: "0.2.0"
 description: >
   libvirt/KVM VM provisioning backend for BlockHost.
   Implements the provisioner contract using virsh + cloud-init.
