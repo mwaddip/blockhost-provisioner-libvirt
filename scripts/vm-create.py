@@ -33,7 +33,7 @@ import argparse
 import ipaddress
 import json
 import os
-import random
+import re
 import secrets
 import subprocess
 import sys
@@ -47,6 +47,11 @@ TEMPLATE_IMAGE = Path("/var/lib/blockhost/templates/blockhost-base.qcow2")
 VM_DISK_DIR = Path("/var/lib/blockhost/vms")
 CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
 DEFAULT_USERNAME = "admin"
+
+# VM name: matches root agent's DOMAIN_RE — alphanumeric, hyphens, underscores, dots
+VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
+# Ethereum wallet address
+WALLET_RE = re.compile(r'^0x[0-9a-fA-F]{40}$')
 
 
 def err(msg):
@@ -71,14 +76,17 @@ def _cleanup_partial(allocated):
     if allocated.get("domain_defined"):
         try:
             from blockhost.root_agent import call
-            call("virsh-destroy", domain=name)
-        except Exception:
-            pass
-        try:
-            from blockhost.root_agent import call
-            call("virsh-undefine", domain=name, remove_storage=True)
-        except Exception:
-            pass
+        except ImportError:
+            call = None
+        if call:
+            try:
+                call("virsh-destroy", domain=name)
+            except Exception:
+                pass
+            try:
+                call("virsh-undefine", domain=name, remove_storage=True)
+            except Exception:
+                pass
 
     # Remove disk overlay
     disk = allocated.get("disk_path")
@@ -116,7 +124,7 @@ def _cleanup_partial(allocated):
 def _generate_mac():
     """Generate a random MAC address in the QEMU/KVM OUI range (52:54:00:xx:xx:xx)."""
     return "52:54:00:{:02x}:{:02x}:{:02x}".format(
-        random.randint(0, 255), random.randint(0, 255), random.randint(0, 255),
+        secrets.randbelow(256), secrets.randbelow(256), secrets.randbelow(256),
     )
 
 
@@ -126,7 +134,6 @@ def _get_libvirt_network_gateway(network_name="default"):
     Returns the IP string or None if not found.
     """
     try:
-        import re
         result = subprocess.run(
             ["virsh", "net-dumpxml", network_name],
             capture_output=True, text=True, timeout=5,
@@ -251,6 +258,12 @@ def main():
 
     args = parser.parse_args()
 
+    # --- Validate inputs ---
+    if not VM_NAME_RE.match(args.name):
+        fail(f"Invalid VM name: {args.name!r} (alphanumeric, hyphens, dots; 1-64 chars)")
+    if not WALLET_RE.match(args.owner_wallet):
+        fail(f"Invalid wallet address: {args.owner_wallet!r} (expected 0x + 40 hex chars)")
+
     # Track allocated resources for cleanup on failure
     allocated = {"name": args.name}
 
@@ -333,6 +346,12 @@ def main():
 
     if not args.apply:
         err("Dry-run mode (pass --apply to create)")
+        try:
+            db.release_ip(ip)
+            if ipv6:
+                db.release_ipv6(ipv6)
+        except Exception as e:
+            err(f"WARNING: Failed to release dry-run IP allocation: {e}")
         print(json.dumps({
             "status": "ok",
             "vm_name": args.name,
@@ -524,7 +543,6 @@ def main():
 
     if ipv6:
         try:
-            from blockhost.root_agent import call
             call("ip6-route-add", address=f"{ipv6}/128", dev=bridge_name)
             err(f"IPv6 route added: {ipv6}/128 via {bridge_name}")
         except Exception as e:

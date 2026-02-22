@@ -19,6 +19,13 @@ if [ $# -lt 1 ]; then
 fi
 
 VM_NAME="$1"
+
+# Validate VM name format (must match root agent's DOMAIN_RE)
+if [[ ! "$VM_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]]; then
+    echo "Invalid VM name: $VM_NAME" >&2
+    exit 1
+fi
+
 VM_DISK_DIR="/var/lib/blockhost/vms"
 CLOUD_INIT_DIR="/var/lib/blockhost/cloud-init"
 ERRORS=0

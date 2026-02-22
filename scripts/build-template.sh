@@ -116,7 +116,7 @@ fi
 # --- Customize the image ---
 
 log "Customizing image with virt-customize..."
-virt-customize -a "$TEMPLATE_STAGING" \
+if ! virt-customize -a "$TEMPLATE_STAGING" \
     "${CUSTOMIZE_ARGS[@]}" \
     \
     --install "cloud-init,qemu-guest-agent,sudo,curl" \
@@ -159,8 +159,7 @@ datasource_list: [NoCloud, None]
     --run-command "find /var/log -type f -exec truncate -s 0 {} \\;" \
     --run-command "rm -f /etc/ssh/ssh_host_*" \
     --run-command "fstrim / 2>/dev/null || true"
-
-if [ $? -ne 0 ]; then
+then
     rm -f "$TEMPLATE_STAGING"
     die "virt-customize failed"
 fi

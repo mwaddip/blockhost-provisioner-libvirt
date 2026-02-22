@@ -57,7 +57,8 @@ def handle_virsh_define(params):
     xml_path = params.get('xml_path', '')
     if not isinstance(xml_path, str) or not xml_path:
         return {'ok': False, 'error': 'xml_path is required'}
-    if not xml_path.startswith('/var/lib/blockhost/'):
+    real_path = os.path.realpath(xml_path)
+    if not real_path.startswith('/var/lib/blockhost/'):
         return {'ok': False, 'error': 'xml_path must be under /var/lib/blockhost/'}
     if not os.path.isfile(xml_path):
         return {'ok': False, 'error': f'XML file not found: {xml_path}'}
