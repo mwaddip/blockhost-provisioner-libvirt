@@ -3,7 +3,8 @@
 blockhost-vm-create — Create a VM on libvirt/KVM with cloud-init.
 
 Contract:
-  blockhost-vm-create <name> --owner-wallet <0x> --nft-token-id <int>
+  blockhost-vm-create <name> --owner-wallet <0x>
+      [--nft-token-id <int>]
       [--expiry-days N]
       [--cpu N] [--memory N] [--disk N]
       [--apply]
@@ -242,8 +243,8 @@ def main():
     parser.add_argument("--disk", type=int, default=20, help="Disk size in GB")
     parser.add_argument("--apply", action="store_true", help="Actually create the VM (dry-run without)")
     parser.add_argument("--cloud-init-content", help="Path to pre-rendered cloud-init YAML")
-    parser.add_argument("--nft-token-id", type=int, required=True,
-                        help="NFT token ID (reserved by engine)")
+    parser.add_argument("--nft-token-id", type=int, default=None,
+                        help="NFT token ID (optional — engine calls update-gecos after minting)")
     parser.add_argument("--username", default=DEFAULT_USERNAME, help=f"VM login username (default: {DEFAULT_USERNAME})")
     parser.add_argument("--expiry-days", type=int, default=30, help="Days until VM expires (default: 30)")
     parser.add_argument("--mock", action="store_true", help="Use mock database")
@@ -323,9 +324,10 @@ def main():
     else:
         err("No IPv6 allocated (broker unavailable or pool exhausted)")
 
-    # Token ID comes from the engine (already reserved on-chain)
+    # Token ID is optional — engine calls update-gecos after minting
     nft_token_id = args.nft_token_id
-    err(f"Using NFT token ID: {nft_token_id}")
+    if nft_token_id is not None:
+        err(f"Using NFT token ID: {nft_token_id}")
 
     # --- Dry-run exit point ---
 
@@ -388,7 +390,7 @@ def main():
                 "SIGNING_HOST": signing_host,
                 "SIGNING_DOMAIN": signing_domain,
                 "USERNAME": args.username,
-                "NFT_TOKEN_ID": str(nft_token_id),
+                "NFT_TOKEN_ID": str(nft_token_id) if nft_token_id is not None else "",
                 "WALLET_ADDRESS": args.owner_wallet,
                 "OTP_LENGTH": str(auth.get("otp_length", 6)),
                 "OTP_TTL": str(auth.get("otp_ttl_seconds", 300)),
