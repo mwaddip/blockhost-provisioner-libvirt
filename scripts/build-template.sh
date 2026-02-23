@@ -85,7 +85,7 @@ cp "$CLOUD_IMAGE" "$TEMPLATE_STAGING"
 # Guest disks will be larger (overlay + resize on first boot via cloud-init).
 qemu-img resize "$TEMPLATE_STAGING" 4G
 
-# --- Locate libpam-web3 .deb ---
+# --- Locate template packages ---
 
 LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3_*.deb' -print -quit 2>/dev/null || true)
 if [ -z "$LIBPAM_DEB" ]; then
@@ -93,7 +93,10 @@ if [ -z "$LIBPAM_DEB" ]; then
     LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3-tools_*.deb' -print -quit 2>/dev/null || true)
 fi
 
+AUTH_SVC_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'blockhost-auth-svc_*.deb' -print -quit 2>/dev/null || true)
+
 CUSTOMIZE_ARGS=()
+ENABLE_SERVICES="ssh qemu-guest-agent cloud-init"
 
 if [ -n "$LIBPAM_DEB" ]; then
     log "Found libpam-web3 package: $(basename "$LIBPAM_DEB")"
@@ -111,6 +114,26 @@ else
     CUSTOMIZE_ARGS+=(
         --install "libpam-runtime,openssh-server"
     )
+fi
+
+# Node.js 22 LTS (required by blockhost-auth-svc)
+CUSTOMIZE_ARGS+=(
+    --run-command 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
+    --install nodejs
+)
+
+if [ -n "$AUTH_SVC_DEB" ]; then
+    AUTH_SVC_FILENAME=$(basename "$AUTH_SVC_DEB")
+    log "Found auth-svc package: $AUTH_SVC_FILENAME"
+    CUSTOMIZE_ARGS+=(
+        --copy-in "$AUTH_SVC_DEB:/tmp/"
+        --run-command "dpkg -i /tmp/$AUTH_SVC_FILENAME || apt-get install -f -y"
+        --run-command "rm -f /tmp/$AUTH_SVC_FILENAME"
+    )
+    ENABLE_SERVICES="$ENABLE_SERVICES web3-auth-svc"
+else
+    log "WARNING: No blockhost-auth-svc .deb found in $LIBPAM_DEB_DIR"
+    log "Template will be built without web3 auth service."
 fi
 
 # --- Customize the image ---
@@ -149,7 +172,7 @@ LoginGraceTime 60' \
 datasource_list: [NoCloud, None]
 ' \
     \
-    --run-command "systemctl enable ssh qemu-guest-agent cloud-init" \
+    --run-command "systemctl enable $ENABLE_SERVICES" \
     --run-command "systemctl disable systemd-networkd-wait-online.service || true" \
     \
     --run-command "truncate -s 0 /etc/machine-id" \
