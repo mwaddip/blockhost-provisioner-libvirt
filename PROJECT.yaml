@@ -41,6 +41,9 @@ entry_points:
       after minting to set the actual token ID.
       Gateway from libvirt network XML, fallback to bridge IP / db.yaml.
       IPv6 default route via broker prefix gateway (link-scoped host route).
+      After domain start, sets bridge port isolation on the VM's tap interface
+      via root agent (bridge-port-isolate action) to prevent inter-VM L2 traffic.
+      Non-fatal — VM creation succeeds even if isolation fails.
     args:
       - name: name
         type: positional
@@ -104,6 +107,10 @@ entry_points:
     source: scripts/vm-start.sh
     status: implemented
     args: ["name"]
+    notes: >
+      After successful start, re-applies bridge port isolation on the new tap
+      interface (lost when VM was stopped). Non-fatal — start succeeds even if
+      isolation fails.
 
   blockhost-vm-stop:
     source: scripts/vm-stop.sh

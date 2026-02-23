@@ -168,6 +168,28 @@ def _get_bridge_gateway(bridge_name):
     return None
 
 
+def _get_vm_tap_interface(domain_name):
+    """Get the tap interface name for a VM's bridge connection.
+
+    Parses 'virsh domiflist' output to find the tap device attached
+    to a bridge. Returns the interface name (e.g. 'vnet0') or None.
+    """
+    try:
+        result = subprocess.run(
+            ["virsh", "domiflist", domain_name],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        for line in result.stdout.strip().splitlines()[2:]:  # skip header + separator
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "bridge":
+                return parts[0]
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
 def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name,
                         mac_address):
     """Generate libvirt domain XML for a BlockHost VM.
@@ -538,6 +560,22 @@ def main():
 
     # Clean up the XML file — libvirt has its own copy now
     xml_path.unlink(missing_ok=True)
+
+    # --- Isolate VM port on bridge (prevent inter-VM L2 traffic) ---
+
+    tap_interface = _get_vm_tap_interface(args.name)
+    if tap_interface:
+        try:
+            result = call("bridge-port-isolate", dev=tap_interface)
+            if result.get("ok"):
+                err(f"Bridge port isolation enabled on {tap_interface}")
+            else:
+                err(f"WARNING: Failed to isolate bridge port: {result.get('error')}")
+        except Exception as e:
+            # Non-fatal — VM works without isolation
+            err(f"WARNING: Bridge port isolation failed: {e}")
+    else:
+        err("WARNING: Could not determine tap interface for bridge port isolation")
 
     # --- Add IPv6 route if allocated ---
 
