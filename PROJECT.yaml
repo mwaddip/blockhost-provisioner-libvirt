@@ -14,7 +14,7 @@ package:
   depends:
     - python3 (>= 3.10)
     - blockhost-common (>= 0.1.0)
-    - blockhost-engine (>= 0.1.0)
+    - blockhost-engine-evm (>= 0.1.0)
   recommends:
     - qemu-kvm
     - libvirt-daemon-system
