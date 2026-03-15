@@ -2,7 +2,7 @@
   "name": "libvirt",
   "version": "0.2.0",
   "display_name": "libvirt/KVM + cloud-init",
-  "accent_color": "#0d2627",
+  "accent_color": "#005F61",
 
   "commands": {
     "create":         "blockhost-vm-create",
