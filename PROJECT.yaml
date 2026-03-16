@@ -170,12 +170,71 @@ entry_points:
         description: NFT token ID
 
   blockhost-vm-metrics:
-    source: scripts/vm-metrics.sh
-    status: stub
+    source: scripts/vm-metrics.py
+    status: implemented
+    notes: >
+      Collects CPU, memory, disk I/O, network metrics via virsh domstats
+      (single call). Guest agent provides disk usage, uptime, and connection
+      count (skipped with -1 if agent unresponsive). Rate fields (IOPS,
+      bytes/sec) delta'd against previous sample in /var/lib/blockhost/metrics/.
+    args:
+      - name: name
+        type: positional
+        required: true
+        description: VM name
+    output:
+      format: json
+      schema:
+        cpu_percent: float
+        cpu_count: int
+        memory_used_mb: int
+        memory_total_mb: int
+        disk_used_mb: int
+        disk_total_mb: int
+        disk_read_iops: int
+        disk_write_iops: int
+        disk_read_bytes_sec: int
+        disk_write_bytes_sec: int
+        net_rx_bytes_sec: int
+        net_tx_bytes_sec: int
+        net_connections: int
+        guest_agent_responsive: bool
+        uptime_seconds: int
+        state: string
 
   blockhost-vm-throttle:
-    source: scripts/vm-throttle.sh
-    status: stub
+    source: scripts/vm-throttle.py
+    status: implemented
+    notes: >
+      Applies resource limits via virsh schedinfo (CPU), domiftune (bandwidth),
+      blkdeviotune (IOPS). All through libvirtd with --live flag. Options are
+      additive. --reset restores all defaults. VM must be running.
+    args:
+      - name: name
+        type: positional
+        required: true
+        description: VM name
+      - name: --cpu-shares
+        type: int
+        description: "CPU weight (1-10000, default 1024)"
+      - name: --cpu-quota
+        type: int
+        description: "Hard CPU cap as percent of allocated vCPUs (1-100)"
+      - name: --bandwidth-in
+        type: int
+        description: "Inbound bandwidth limit in kbps (0=unlimited)"
+      - name: --bandwidth-out
+        type: int
+        description: "Outbound bandwidth limit in kbps (0=unlimited)"
+      - name: --iops-read
+        type: int
+        description: "Read IOPS limit (0=unlimited)"
+      - name: --iops-write
+        type: int
+        description: "Write IOPS limit (0=unlimited)"
+      - name: --reset
+        type: flag
+        description: "Remove all limits, restore defaults"
 
   blockhost-build-template:
     source: scripts/build-template.sh

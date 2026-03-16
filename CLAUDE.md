@@ -76,6 +76,8 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 | `scripts/vm-kill.sh` | Force-stop a VM |
 | `scripts/vm-status.sh` | Print VM status |
 | `scripts/vm-list.sh` | List all VMs |
+| `scripts/vm-metrics.py` | Collect VM resource usage metrics (JSON output) |
+| `scripts/vm-throttle.py` | Apply/remove resource limits on a running VM |
 | `scripts/vm-gc.py` | Garbage collection for expired VMs |
 | `scripts/vm-resume.py` | Resume a suspended VM |
 | `scripts/vm-update-gecos.py` | Update VM GECOS field via QEMU guest agent |
