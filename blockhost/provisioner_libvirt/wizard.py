@@ -48,7 +48,7 @@ def wizard_libvirt():
             "gateway": gateway,
             "gc_grace_days": int(request.form.get("gc_grace_days", 7)),
         }
-        return redirect(url_for("wizard_ipv6"))
+        return redirect(url_for("wizard_connectivity"))
 
     return render_template("provisioner_libvirt/libvirt.html", detected=detected)
 

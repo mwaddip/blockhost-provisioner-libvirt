@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="0.1.0"
+VERSION="0.2.0"
 PACKAGE_NAME="blockhost-provisioner-libvirt_${VERSION}_all"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
@@ -29,11 +29,11 @@ mkdir -p "${PKG}/DEBIAN"
 
 cat > "${PKG}/DEBIAN/control" << 'EOF'
 Package: blockhost-provisioner-libvirt
-Version: 0.1.0
+Version: 0.2.0
 Section: admin
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), blockhost-common (>= 0.1.0), libpam-web3-tools (>= 0.5.0)
+Depends: python3 (>= 3.10), blockhost-common (>= 0.1.0)
 Recommends: qemu-kvm, libvirt-daemon-system, libvirt-clients, virtinst, cloud-image-utils
 Suggests: libguestfs-tools
 Conflicts: blockhost-provisioner-proxmox
@@ -54,6 +54,7 @@ Description: libvirt/KVM VM provisioning with NFT-based web3 authentication
   - blockhost-vm-list: List all VMs
   - blockhost-vm-gc: Garbage collect expired VMs
   - blockhost-vm-resume: Resume a suspended VM
+  - blockhost-vm-update-gecos: Update VM GECOS field
   - blockhost-build-template: Build qcow2 VM template
   - blockhost-provisioner-detect: Detect libvirt/KVM host
   - Provisioner manifest for engine integration
@@ -131,6 +132,7 @@ cp "${SCRIPT_DIR}/scripts/vm-throttle.sh" "${PKG}/usr/bin/blockhost-vm-throttle"
 cp "${SCRIPT_DIR}/scripts/vm-gc.py" "${PKG}/usr/bin/blockhost-vm-gc"
 cp "${SCRIPT_DIR}/scripts/vm-resume.py" "${PKG}/usr/bin/blockhost-vm-resume"
 cp "${SCRIPT_DIR}/scripts/build-template.sh" "${PKG}/usr/bin/blockhost-build-template"
+cp "${SCRIPT_DIR}/scripts/vm-update-gecos.py" "${PKG}/usr/bin/blockhost-vm-update-gecos"
 cp "${SCRIPT_DIR}/scripts/provisioner-detect.sh" "${PKG}/usr/bin/blockhost-provisioner-detect"
 
 chmod 755 "${PKG}/usr/bin/"blockhost-*

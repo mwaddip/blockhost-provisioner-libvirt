@@ -4,11 +4,11 @@ blockhost-vm-create — Create a VM on libvirt/KVM with cloud-init.
 
 Contract:
   blockhost-vm-create <name> --owner-wallet <0x>
+      [--nft-token-id <int>]
+      [--expiry-days N]
       [--cpu N] [--memory N] [--disk N]
       [--apply]
       [--cloud-init-content <path>]
-      [--skip-mint] [--no-mint]
-      [--user-signature <hex> --public-secret <str>]
       [--mock]
 
   stdout (JSON on success):
@@ -33,7 +33,7 @@ import argparse
 import ipaddress
 import json
 import os
-import random
+import re
 import secrets
 import subprocess
 import sys
@@ -47,6 +47,11 @@ TEMPLATE_IMAGE = Path("/var/lib/blockhost/templates/blockhost-base.qcow2")
 VM_DISK_DIR = Path("/var/lib/blockhost/vms")
 CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
 DEFAULT_USERNAME = "admin"
+
+# VM name: matches root agent's DOMAIN_RE — alphanumeric, hyphens, underscores, dots
+VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
+# Ethereum wallet address
+WALLET_RE = re.compile(r'^0x[0-9a-fA-F]{40}$')
 
 
 def err(msg):
@@ -71,14 +76,17 @@ def _cleanup_partial(allocated):
     if allocated.get("domain_defined"):
         try:
             from blockhost.root_agent import call
-            call("virsh-destroy", domain=name)
-        except Exception:
-            pass
-        try:
-            from blockhost.root_agent import call
-            call("virsh-undefine", domain=name, remove_storage=True)
-        except Exception:
-            pass
+        except ImportError:
+            call = None
+        if call:
+            try:
+                call("virsh-destroy", domain=name)
+            except Exception:
+                pass
+            try:
+                call("virsh-undefine", domain=name, remove_storage=True)
+            except Exception:
+                pass
 
     # Remove disk overlay
     disk = allocated.get("disk_path")
@@ -111,58 +119,12 @@ def _cleanup_partial(allocated):
         except Exception:
             pass
 
-    # Mark NFT reservation as failed
-    if allocated.get("nft_token_id") and allocated.get("db"):
-        try:
-            allocated["db"].mark_nft_failed(allocated["nft_token_id"])
-        except Exception:
-            pass
-
-
-def _get_on_chain_total_supply():
-    """Query the NFT contract's totalSupply() via cast (foundry).
-
-    Returns the total number of minted tokens as int, or None on failure.
-    Used as a floor for local token ID reservation to avoid collisions
-    with tokens that already exist on-chain.
-    """
-    env_path = Path("/opt/blockhost/.env")
-    if not env_path.exists():
-        return None
-
-    env = {}
-    try:
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip('"').strip("'")
-    except OSError:
-        return None
-
-    contract = env.get("NFT_CONTRACT", "")
-    rpc_url = env.get("RPC_URL", "")
-    if not contract or not rpc_url:
-        return None
-
-    try:
-        result = subprocess.run(
-            ["cast", "call", contract, "totalSupply()(uint256)", "--rpc-url", rpc_url],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip())
-    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
-        pass
-
-    return None
 
 
 def _generate_mac():
     """Generate a random MAC address in the QEMU/KVM OUI range (52:54:00:xx:xx:xx)."""
     return "52:54:00:{:02x}:{:02x}:{:02x}".format(
-        random.randint(0, 255), random.randint(0, 255), random.randint(0, 255),
+        secrets.randbelow(256), secrets.randbelow(256), secrets.randbelow(256),
     )
 
 
@@ -172,7 +134,6 @@ def _get_libvirt_network_gateway(network_name="default"):
     Returns the IP string or None if not found.
     """
     try:
-        import re
         result = subprocess.run(
             ["virsh", "net-dumpxml", network_name],
             capture_output=True, text=True, timeout=5,
@@ -202,6 +163,28 @@ def _get_bridge_gateway(bridge_name):
             for i, part in enumerate(parts):
                 if part == "inet" and i + 1 < len(parts):
                     return parts[i + 1].split("/")[0]
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
+def _get_vm_tap_interface(domain_name):
+    """Get the tap interface name for a VM's bridge connection.
+
+    Parses 'virsh domiflist' output to find the tap device attached
+    to a bridge. Returns the interface name (e.g. 'vnet0') or None.
+    """
+    try:
+        result = subprocess.run(
+            ["virsh", "domiflist", domain_name],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        for line in result.stdout.strip().splitlines()[2:]:  # skip header + separator
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "bridge":
+                return parts[0]
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return None
@@ -289,15 +272,19 @@ def main():
     parser.add_argument("--disk", type=int, default=20, help="Disk size in GB")
     parser.add_argument("--apply", action="store_true", help="Actually create the VM (dry-run without)")
     parser.add_argument("--cloud-init-content", help="Path to pre-rendered cloud-init YAML")
-    parser.add_argument("--skip-mint", action="store_true", help="Skip NFT minting")
-    parser.add_argument("--no-mint", action="store_true", help="Skip NFT minting (engine handles it)")
-    parser.add_argument("--user-signature", help="User signature for encrypted credentials")
-    parser.add_argument("--public-secret", help="Public secret for signature verification")
+    parser.add_argument("--nft-token-id", type=int, default=None,
+                        help="NFT token ID (optional — engine calls update-gecos after minting)")
     parser.add_argument("--username", default=DEFAULT_USERNAME, help=f"VM login username (default: {DEFAULT_USERNAME})")
     parser.add_argument("--expiry-days", type=int, default=30, help="Days until VM expires (default: 30)")
     parser.add_argument("--mock", action="store_true", help="Use mock database")
 
     args = parser.parse_args()
+
+    # --- Validate inputs ---
+    if not VM_NAME_RE.match(args.name):
+        fail(f"Invalid VM name: {args.name!r} (alphanumeric, hyphens, dots; 1-64 chars)")
+    if not WALLET_RE.match(args.owner_wallet):
+        fail(f"Invalid wallet address: {args.owner_wallet!r} (expected 0x + 40 hex chars)")
 
     # Track allocated resources for cleanup on failure
     allocated = {"name": args.name}
@@ -372,21 +359,21 @@ def main():
     else:
         err("No IPv6 allocated (broker unavailable or pool exhausted)")
 
-    # Reserve NFT token ID — query on-chain totalSupply as floor
-    on_chain_supply = _get_on_chain_total_supply()
-    if on_chain_supply is not None:
-        err(f"On-chain totalSupply: {on_chain_supply}")
-        nft_token_id = db.reserve_nft_token_id(args.name, token_id=on_chain_supply)
-    else:
-        err("Could not query on-chain totalSupply, using local-only reservation")
-        nft_token_id = db.reserve_nft_token_id(args.name)
-    allocated["nft_token_id"] = nft_token_id
-    err(f"Reserved NFT token ID: {nft_token_id}")
+    # Token ID is optional — engine calls update-gecos after minting
+    nft_token_id = args.nft_token_id
+    if nft_token_id is not None:
+        err(f"Using NFT token ID: {nft_token_id}")
 
     # --- Dry-run exit point ---
 
     if not args.apply:
         err("Dry-run mode (pass --apply to create)")
+        try:
+            db.release_ip(ip)
+            if ipv6:
+                db.release_ipv6(ipv6)
+        except Exception as e:
+            err(f"WARNING: Failed to release dry-run IP allocation: {e}")
         print(json.dumps({
             "status": "ok",
             "vm_name": args.name,
@@ -422,7 +409,6 @@ def main():
         try:
             from blockhost.cloud_init import render_cloud_init
 
-            blockchain = web3_config.get("blockchain", {})
             auth = web3_config.get("auth", {})
 
             # Derive FQDN from broker DNS zone if available
@@ -445,10 +431,8 @@ def main():
                 "SIGNING_HOST": signing_host,
                 "SIGNING_DOMAIN": signing_domain,
                 "USERNAME": args.username,
-                "NFT_TOKEN_ID": str(nft_token_id),
-                "CHAIN_ID": str(blockchain.get("chain_id", "")),
-                "NFT_CONTRACT": blockchain.get("nft_contract", ""),
-                "RPC_URL": blockchain.get("rpc_url", ""),
+                "NFT_TOKEN_ID": str(nft_token_id) if nft_token_id is not None else "",
+                "WALLET_ADDRESS": args.owner_wallet,
                 "OTP_LENGTH": str(auth.get("otp_length", 6)),
                 "OTP_TTL": str(auth.get("otp_ttl_seconds", 300)),
                 "SECRET_KEY": secrets.token_hex(32),
@@ -577,11 +561,26 @@ def main():
     # Clean up the XML file — libvirt has its own copy now
     xml_path.unlink(missing_ok=True)
 
+    # --- Isolate VM port on bridge (prevent inter-VM L2 traffic) ---
+
+    tap_interface = _get_vm_tap_interface(args.name)
+    if tap_interface:
+        try:
+            result = call("bridge-port-isolate", dev=tap_interface)
+            if result.get("ok"):
+                err(f"Bridge port isolation enabled on {tap_interface}")
+            else:
+                err(f"WARNING: Failed to isolate bridge port: {result.get('error')}")
+        except Exception as e:
+            # Non-fatal — VM works without isolation
+            err(f"WARNING: Bridge port isolation failed: {e}")
+    else:
+        err("WARNING: Could not determine tap interface for bridge port isolation")
+
     # --- Add IPv6 route if allocated ---
 
     if ipv6:
         try:
-            from blockhost.root_agent import call
             call("ip6-route-add", address=f"{ipv6}/128", dev=bridge_name)
             err(f"IPv6 route added: {ipv6}/128 via {bridge_name}")
         except Exception as e:
