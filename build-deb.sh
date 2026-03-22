@@ -36,7 +36,8 @@ Architecture: all
 Depends: python3 (>= 3.10), blockhost-common (>= 0.1.0)
 Recommends: qemu-kvm, libvirt-daemon-system, libvirt-clients, virtinst, cloud-image-utils
 Suggests: libguestfs-tools
-Conflicts: blockhost-provisioner-proxmox
+Provides: blockhost-provisioner
+Conflicts: blockhost-provisioner
 Maintainer: Blockhost Team <blockhost@example.com>
 Description: libvirt/KVM VM provisioning with NFT-based web3 authentication
  This package provides tools for provisioning libvirt/KVM VMs with
