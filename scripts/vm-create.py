@@ -50,8 +50,18 @@ DEFAULT_USERNAME = "admin"
 
 # VM name: matches root agent's DOMAIN_RE — alphanumeric, hyphens, underscores, dots
 VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
-# Ethereum wallet address
-WALLET_RE = re.compile(r'^0x[0-9a-fA-F]{40}$')
+def _load_wallet_pattern():
+    """Load address format from engine manifest, or accept any non-empty string."""
+    try:
+        manifest = json.loads(Path('/usr/share/blockhost/engine.json').read_text())
+        pattern = manifest.get('constraints', {}).get('address_pattern')
+        if pattern:
+            return re.compile(pattern)
+    except (OSError, json.JSONDecodeError, re.error):
+        pass
+    return None
+
+WALLET_RE = _load_wallet_pattern()
 
 
 def err(msg):
@@ -266,7 +276,7 @@ def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_
 def main():
     parser = argparse.ArgumentParser(description="Create a BlockHost VM on libvirt/KVM")
     parser.add_argument("name", help="VM name")
-    parser.add_argument("--owner-wallet", required=True, help="Owner wallet address (0x...)")
+    parser.add_argument("--owner-wallet", required=True, help="Owner wallet address")
     parser.add_argument("--cpu", type=int, default=1, help="Number of vCPUs")
     parser.add_argument("--memory", type=int, default=2048, help="Memory in MB")
     parser.add_argument("--disk", type=int, default=20, help="Disk size in GB")
@@ -283,8 +293,10 @@ def main():
     # --- Validate inputs ---
     if not VM_NAME_RE.match(args.name):
         fail(f"Invalid VM name: {args.name!r} (alphanumeric, hyphens, dots; 1-64 chars)")
-    if not WALLET_RE.match(args.owner_wallet):
-        fail(f"Invalid wallet address: {args.owner_wallet!r} (expected 0x + 40 hex chars)")
+    if not args.owner_wallet or not args.owner_wallet.strip():
+        fail("Empty wallet address")
+    if WALLET_RE and not WALLET_RE.match(args.owner_wallet):
+        fail(f"Invalid wallet address format: {args.owner_wallet!r}")
 
     # Track allocated resources for cleanup on failure
     allocated = {"name": args.name}
