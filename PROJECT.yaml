@@ -240,11 +240,10 @@ entry_points:
     source: scripts/build-template.sh
     status: implemented
     notes: >
-      Builds qcow2 base image with libguestfs. Installs Node.js 22 LTS
-      (from NodeSource APT repo). Auto-detects libpam-web3 and
-      blockhost-auth-svc .deb packages from /var/lib/blockhost/template-packages/
-      and installs them if found. Enables web3-auth-svc systemd service
-      when auth-svc package is present.
+      Builds qcow2 base image with libguestfs. Installs ALL .deb packages
+      found in /var/lib/blockhost/template-packages/ (libpam-web3, chain-specific
+      PAM plugins, etc.) via a single dpkg -i pass. Fails if no template
+      packages are found.
 
   blockhost-provisioner-detect:
     source: scripts/provisioner-detect.sh

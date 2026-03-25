@@ -85,56 +85,35 @@ cp "$CLOUD_IMAGE" "$TEMPLATE_STAGING"
 # Guest disks will be larger (overlay + resize on first boot via cloud-init).
 qemu-img resize "$TEMPLATE_STAGING" 4G
 
-# --- Locate template packages ---
+# --- Locate ALL template packages ---
 
-LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3_*.deb' -print -quit 2>/dev/null || true)
-if [ -z "$LIBPAM_DEB" ]; then
-    # Also check for the older package name (deprecated)
-    LIBPAM_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'libpam-web3-tools_*.deb' -print -quit 2>/dev/null || true)
+TEMPLATE_DEBS=()
+for deb in "$LIBPAM_DEB_DIR"/*.deb; do
+    [ -f "$deb" ] || continue
+    TEMPLATE_DEBS+=("$deb")
+    log "Found template package: $(basename "$deb")"
+done
+
+if [ ${#TEMPLATE_DEBS[@]} -eq 0 ]; then
+    die "No template packages found in $LIBPAM_DEB_DIR"
 fi
-
-AUTH_SVC_DEB=$(find "$LIBPAM_DEB_DIR" -maxdepth 1 -name 'blockhost-auth-svc_*.deb' -print -quit 2>/dev/null || true)
 
 CUSTOMIZE_ARGS=()
-ENABLE_SERVICES="ssh qemu-guest-agent cloud-init"
 
-if [ -n "$LIBPAM_DEB" ]; then
-    log "Found libpam-web3 package: $(basename "$LIBPAM_DEB")"
-    CUSTOMIZE_ARGS+=(
-        # Install the .deb and its dependencies
-        --install "libpam-runtime,openssh-server"
-        --copy-in "$LIBPAM_DEB:/tmp/"
-        --run-command "dpkg -i /tmp/$(basename "$LIBPAM_DEB") || apt-get install -f -y"
-        --run-command "rm -f /tmp/$(basename "$LIBPAM_DEB")"
-    )
-else
-    log "WARNING: No libpam-web3 .deb found in $LIBPAM_DEB_DIR"
-    log "Template will be built without web3 PAM auth."
-    log "Place the .deb in $LIBPAM_DEB_DIR and re-run with --force."
-    CUSTOMIZE_ARGS+=(
-        --install "libpam-runtime,openssh-server"
-    )
-fi
+# Install dependencies needed by template packages
+CUSTOMIZE_ARGS+=(--install "libpam-runtime,openssh-server")
 
-# Node.js 22 LTS (required by blockhost-auth-svc)
-CUSTOMIZE_ARGS+=(
-    --run-command 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
-    --install nodejs
-)
+# Copy all .deb packages into the VM
+for deb in "${TEMPLATE_DEBS[@]}"; do
+    CUSTOMIZE_ARGS+=(--copy-in "$deb:/tmp/")
+done
 
-if [ -n "$AUTH_SVC_DEB" ]; then
-    AUTH_SVC_FILENAME=$(basename "$AUTH_SVC_DEB")
-    log "Found auth-svc package: $AUTH_SVC_FILENAME"
-    CUSTOMIZE_ARGS+=(
-        --copy-in "$AUTH_SVC_DEB:/tmp/"
-        --run-command "dpkg -i /tmp/$AUTH_SVC_FILENAME || apt-get install -f -y"
-        --run-command "rm -f /tmp/$AUTH_SVC_FILENAME"
-    )
-    ENABLE_SERVICES="$ENABLE_SERVICES web3-auth-svc"
-else
-    log "WARNING: No blockhost-auth-svc .deb found in $LIBPAM_DEB_DIR"
-    log "Template will be built without web3 auth service."
-fi
+# Install all at once (dpkg handles dependency order within the set)
+DEB_NAMES=$(printf "/tmp/%s " "${TEMPLATE_DEBS[@]##*/}")
+CUSTOMIZE_ARGS+=(--run-command "dpkg -i $DEB_NAMES || apt-get install -f -y")
+
+# Clean up copied .deb files
+CUSTOMIZE_ARGS+=(--run-command "rm -f $DEB_NAMES")
 
 # --- Customize the image ---
 
@@ -172,7 +151,7 @@ LoginGraceTime 60' \
 datasource_list: [NoCloud, None]
 ' \
     \
-    --run-command "systemctl enable $ENABLE_SERVICES" \
+    --run-command "systemctl enable ssh qemu-guest-agent cloud-init" \
     --run-command "systemctl disable systemd-networkd-wait-online.service || true" \
     \
     --run-command "truncate -s 0 /etc/machine-id" \
