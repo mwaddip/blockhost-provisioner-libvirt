@@ -438,6 +438,7 @@ def main():
 
             variables = {
                 "VM_NAME": args.name,
+                "VM_FQDN": signing_domain if signing_domain else f"{args.name}.local",
                 "VM_IP": ip,
                 "VM_IPV6": ipv6,
                 "SIGNING_HOST": signing_host,
