@@ -145,6 +145,8 @@ PasswordAuthentication no
 PermitRootLogin no
 MaxAuthTries 6
 LoginGraceTime 60' \
+    --run-command 'grep -q "^Include /etc/ssh/sshd_config.d" /etc/ssh/sshd_config || sed -i "1i Include /etc/ssh/sshd_config.d/*.conf" /etc/ssh/sshd_config' \
+    --run-command 'sed -i "s/^KbdInteractiveAuthentication no/#KbdInteractiveAuthentication no  # overridden by sshd_config.d/" /etc/ssh/sshd_config' \
     \
     --write '/etc/cloud/cloud.cfg.d/99-blockhost.cfg:# BlockHost cloud-init configuration
 # Use NoCloud datasource (ISO attached as CDROM)
