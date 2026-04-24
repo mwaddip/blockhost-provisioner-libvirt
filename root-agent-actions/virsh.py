@@ -27,6 +27,13 @@ USERNAME_RE = re.compile(r'^[a-z_][a-z0-9_-]{0,31}$')
 # GECOS for update-gecos: wallet=<addr>,nft=<id> — safe chars only, no shell/JSON injection
 GECOS_RE = re.compile(r'^[a-zA-Z0-9=,._:-]{10,200}$')
 
+# guest-exec command: qemu-guest-agent rejects payloads over ~4KB. The command
+# itself is evaluated by /bin/sh inside the VM, so shell metacharacters are
+# expected and not filtered here — the boundary is VM-internal, not host.
+GUEST_EXEC_MAX_LEN = 4000
+GUEST_EXEC_POLL_TIMEOUT = 120  # seconds — covers network hook ops (sed, echo, curl)
+GUEST_EXEC_POLL_INTERVAL = 0.3
+
 
 def validate_domain(params):
     """Extract and validate domain name from params."""
@@ -163,6 +170,91 @@ def handle_virsh_update_gecos(params):
     return {'ok': False, 'error': 'guest-exec timed out waiting for usermod'}
 
 
+def handle_virsh_guest_exec(params):
+    """Execute a shell command inside a running VM via QEMU guest agent.
+
+    Generic guest-exec primitive. The command string is run as `/bin/sh -c
+    <command>` inside the VM — shell metacharacters are expected, not
+    filtered (the boundary is inside the guest, not on the host).
+
+    params:
+        domain (str):  VM domain name
+        command (str): Shell command to execute inside the VM
+
+    Returns on success:
+        {'ok': True, 'exitcode': int, 'stdout': str, 'stderr': str}
+
+    Returns on guest-agent failure:
+        {'ok': False, 'error': str}
+    """
+    domain = validate_domain(params)
+
+    command = params.get('command', '')
+    if not isinstance(command, str) or not command:
+        return {'ok': False, 'error': 'command is required'}
+    if len(command) > GUEST_EXEC_MAX_LEN:
+        return {'ok': False, 'error': f'command too long (>{GUEST_EXEC_MAX_LEN} bytes)'}
+
+    exec_cmd = json.dumps({
+        'execute': 'guest-exec',
+        'arguments': {
+            'path': '/bin/sh',
+            'arg': ['-c', command],
+            'capture-output': True,
+        },
+    })
+
+    rc, out, err = run(
+        ['virsh', 'qemu-agent-command', domain, exec_cmd],
+        timeout=30,
+    )
+    if rc != 0:
+        return {'ok': False, 'error': err or out}
+
+    try:
+        pid = json.loads(out)['return']['pid']
+    except (json.JSONDecodeError, KeyError) as exc:
+        return {'ok': False, 'error': f'Failed to parse guest-exec response: {exc}'}
+
+    status_cmd = json.dumps({
+        'execute': 'guest-exec-status',
+        'arguments': {'pid': pid},
+    })
+
+    deadline = time.monotonic() + GUEST_EXEC_POLL_TIMEOUT
+    while time.monotonic() < deadline:
+        time.sleep(GUEST_EXEC_POLL_INTERVAL)
+        rc, out, err = run(
+            ['virsh', 'qemu-agent-command', domain, status_cmd],
+            timeout=10,
+        )
+        if rc != 0:
+            return {'ok': False, 'error': err or out}
+
+        try:
+            result = json.loads(out)['return']
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+        if not result.get('exited', False):
+            continue
+
+        stdout = ''
+        stderr = ''
+        if result.get('out-data'):
+            stdout = base64.b64decode(result['out-data']).decode('utf-8', errors='replace')
+        if result.get('err-data'):
+            stderr = base64.b64decode(result['err-data']).decode('utf-8', errors='replace')
+        return {
+            'ok': True,
+            'exitcode': int(result.get('exitcode', 0)),
+            'stdout': stdout,
+            'stderr': stderr,
+        }
+
+    return {'ok': False, 'error': f'guest-exec timed out after {GUEST_EXEC_POLL_TIMEOUT}s'}
+
+
 ACTIONS = {
     'virsh-start':    lambda p: _handle_virsh_simple(p, 'start'),
     'virsh-destroy':  lambda p: _handle_virsh_simple(p, 'destroy'),        # force stop (confusing, blame libvirt)
@@ -171,4 +263,5 @@ ACTIONS = {
     'virsh-define':   handle_virsh_define,
     'virsh-undefine': handle_virsh_undefine,
     'virsh-update-gecos': handle_virsh_update_gecos,
+    'virsh-guest-exec':   handle_virsh_guest_exec,
 }

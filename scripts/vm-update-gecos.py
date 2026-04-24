@@ -10,15 +10,22 @@ Called by the engine reconciler when an NFT ownership transfer is detected.
 The GECOS field (wallet=<addr>,nft=<id>) is read by the PAM module to verify
 the VM user's wallet address.
 
+Execution path: delegates to `blockhost-vm-guest-exec` so all in-VM command
+execution flows through a single primitive. The GECOS string is built here;
+`usermod -c` inside the VM applies it atomically.
+
 The VM must be running with a responsive QEMU guest agent. If the VM is
 stopped or suspended, the command fails and the reconciler retries next cycle.
 """
 
 import argparse
+import shlex
+import subprocess
 import sys
 
 
 DEFAULT_USERNAME = "admin"
+GUEST_EXEC_CLI = "blockhost-vm-guest-exec"
 
 
 def err(msg):
@@ -39,26 +46,22 @@ def main():
     gecos = f"wallet={args.wallet_address},nft={args.nft_id}"
     err(f"Updating GECOS for {args.name}: {gecos}")
 
-    try:
-        from blockhost.root_agent import call, RootAgentError
-    except ImportError:
-        err("blockhost-common not installed (cannot import blockhost.root_agent)")
-        sys.exit(1)
+    # shlex.quote protects the sh -c context inside the VM — gecos values
+    # contain `,` and `=`, and the wallet address comes from the engine.
+    command = f"usermod -c {shlex.quote(gecos)} {shlex.quote(DEFAULT_USERNAME)}"
 
     try:
-        result = call(
-            'virsh-update-gecos',
-            domain=args.name,
-            username=DEFAULT_USERNAME,
-            gecos=gecos,
+        result = subprocess.run(
+            [GUEST_EXEC_CLI, args.name, command],
+            check=False,
         )
-    except RootAgentError as exc:
-        err(f"Root agent error: {exc}")
+    except FileNotFoundError:
+        err(f"{GUEST_EXEC_CLI} not found on PATH (blockhost-provisioner-libvirt not installed?)")
         sys.exit(1)
 
-    if not result.get('ok'):
-        err(f"Failed: {result.get('error', 'unknown error')}")
-        sys.exit(1)
+    if result.returncode != 0:
+        err(f"Failed (exit {result.returncode})")
+        sys.exit(result.returncode)
 
     err(f"GECOS updated for {args.name}")
     sys.exit(0)

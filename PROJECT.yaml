@@ -154,6 +154,8 @@ entry_points:
     notes: >
       Updates VM user GECOS field via QEMU guest agent.
       Called by engine reconciler on NFT ownership transfer.
+      Delegates to blockhost-vm-guest-exec with a `usermod -c` command so all
+      in-VM execution flows through a single primitive.
       VM must be running with responsive guest agent.
     args:
       - name: name
@@ -168,6 +170,26 @@ entry_points:
         type: string
         required: true
         description: NFT token ID
+
+  blockhost-vm-guest-exec:
+    source: scripts/vm-guest-exec.py
+    status: implemented
+    notes: >
+      Generic primitive: runs a shell command inside a running VM via the
+      QEMU guest agent (/bin/sh -c <command>). Used by the network hook
+      (pushing .onion into /etc/hosts, updating signing URL) and by
+      update-gecos. Prints the command's stdout to stdout, stderr to stderr,
+      and exits with the command's exit code. Commands >4KB may fail — not
+      suitable for large payloads (use guest-file-* for those).
+    args:
+      - name: name
+        type: positional
+        required: true
+        description: VM name (libvirt domain name)
+      - name: command
+        type: remainder
+        required: true
+        description: Shell command to run inside the VM
 
   blockhost-vm-metrics:
     source: scripts/vm-metrics.py
@@ -277,7 +299,19 @@ root_agent_actions:
     virsh-update-gecos:
       params: {domain: string, username: string, gecos: string}
       runs: "virsh qemu-agent-command <domain> (guest-exec usermod -c <gecos> <username>)"
-      notes: Purpose-built action, validates username and GECOS format
+      notes: >
+        Purpose-built action, validates username and GECOS format.
+        No longer called by vm-update-gecos.py (which now delegates to
+        virsh-guest-exec); retained for backward compatibility with any
+        external callers until the facts contract drops it.
+    virsh-guest-exec:
+      params: {domain: string, command: string}
+      runs: "virsh qemu-agent-command <domain> (guest-exec /bin/sh -c <command>)"
+      notes: >
+        Generic guest-exec primitive. Polls guest-exec-status for completion,
+        returns {ok, exitcode, stdout, stderr}. Command string is run inside
+        the VM — shell metacharacters are expected, not filtered (the boundary
+        is VM-internal). Command size capped at ~4KB (guest-agent limit).
 
 wizard:
   module: blockhost.provisioner_libvirt.wizard

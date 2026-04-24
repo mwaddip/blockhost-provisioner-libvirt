@@ -80,7 +80,8 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 | `scripts/vm-throttle.py` | Apply/remove resource limits on a running VM |
 | `scripts/vm-gc.py` | Garbage collection for expired VMs |
 | `scripts/vm-resume.py` | Resume a suspended VM |
-| `scripts/vm-update-gecos.py` | Update VM GECOS field via QEMU guest agent |
+| `scripts/vm-update-gecos.py` | Update VM GECOS field (delegates to guest-exec) |
+| `scripts/vm-guest-exec.py` | Run a shell command inside a VM via the guest agent |
 | `scripts/build-template.sh` | qcow2 template builder |
 | `scripts/provisioner-detect.sh` | Detect libvirt/KVM host |
 | `blockhost/provisioner_libvirt/wizard.py` | Wizard plugin (Blueprint, finalization, summary) |
