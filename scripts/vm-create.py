@@ -467,7 +467,7 @@ def main():
                 db.release_ipv6(ipv6)
         except Exception as e:
             err(f"WARNING: Failed to release dry-run IP allocation: {e}")
-        print(json.dumps({
+        result = {
             "status": "ok",
             "vm_name": args.name,
             "ip": ip,
@@ -475,7 +475,8 @@ def main():
             "vmid": args.name,
             "nft_token_id": nft_token_id,
             "username": args.username,
-        }))
+        }
+        print(f"BLOCKHOST_RESULT: {json.dumps(result)}")
         sys.exit(0)
 
     # --- Render cloud-init ---
@@ -698,11 +699,12 @@ def main():
         # vmid=0 is the libvirt sentinel — vm_name is the natural key.
         # See facts/COMMON_INTERFACE.md (register_vm) and PROVISIONER_INTERFACE.md
         # §2.1 ("vmid: int or string").
-        vm_record = db.register_vm(
+        db.register_vm(
             name=args.name,
             vmid=0,
             ip=ip,
             ipv6=ipv6,
+            owner=args.owner_wallet,
             expiry_days=args.expiry_days,
             wallet_address=args.owner_wallet,
             username=args.username,
@@ -713,7 +715,7 @@ def main():
 
     # --- Output ---
 
-    print(json.dumps({
+    result = {
         "status": "ok",
         "vm_name": args.name,
         "ip": ip,
@@ -721,7 +723,8 @@ def main():
         "vmid": args.name,
         "nft_token_id": nft_token_id,
         "username": args.username,
-    }))
+    }
+    print(f"BLOCKHOST_RESULT: {json.dumps(result)}")
     sys.exit(0)
 
 

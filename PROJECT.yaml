@@ -47,6 +47,14 @@ entry_points:
       §6a so engine reconcilers defer while in flight; releases on exit
       (atexit + SIGTERM/SIGINT handlers). Stale-PID detection on acquire.
       Skipped when --mock.
+      Calls blockhost.vm_db.register_vm(vmid=0, owner=wallet, wallet_address=wallet)
+      after the domain is started but before printing the result line — provisioner
+      owns VM-record creation per facts/PROVISIONER_INTERFACE.md §2 (create →
+      Database side effects). On register_vm failure, _cleanup_partial tears the
+      VM down before exiting non-zero.
+      Result line on stdout is prefixed with the literal string `BLOCKHOST_RESULT: `
+      (single trailing space) per facts/PROVISIONER_INTERFACE.md §2 Common
+      Conventions; emitted on both --apply success and dry-run.
     args:
       - name: name
         type: positional
@@ -90,13 +98,13 @@ entry_points:
         type: flag
         description: Use mock database
     output:
-      format: json
+      format: "BLOCKHOST_RESULT: <json>"   # single line, sentinel-prefixed
       schema:
         status: ok|error
         vm_name: string
         ip: string
         ipv6: string
-        vmid: string  # domain name for libvirt
+        vmid: string  # domain name for libvirt; DB record stores 0 (vm_name is canonical key)
         nft_token_id: int
         username: string
 
@@ -104,7 +112,13 @@ entry_points:
     source: scripts/vm-destroy.sh
     status: implemented
     args: ["name"]
-    notes: Must be idempotent
+    notes: >
+      Must be idempotent. After virsh destroy/undefine and filesystem cleanup,
+      calls blockhost.vm_db.mark_destroyed(name) to flip the record to
+      destroyed and release IP/IPv6 allocations — provisioner owns lifecycle
+      endpoints per facts/PROVISIONER_INTERFACE.md §2 (destroy → Database
+      side effects). Pre-checks the record's status so already-destroyed
+      records are a no-op (matches the "log and continue" idempotent semantics).
 
   blockhost-vm-start:
     source: scripts/vm-start.sh
