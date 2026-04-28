@@ -161,11 +161,13 @@ entry_points:
     source: scripts/vm-update-gecos.py
     status: implemented
     notes: >
-      Updates VM user GECOS field via QEMU guest agent.
-      Called by engine reconciler on NFT ownership transfer.
-      Delegates to blockhost-vm-guest-exec with a `usermod -c` command so all
-      in-VM execution flows through a single primitive.
-      VM must be running with responsive guest agent.
+      Updates VM user GECOS field via QEMU guest agent. Called by engine
+      reconciler on NFT ownership transfer. Looks the in-VM username up in
+      the VM database (set at vm-create time); falls back to "admin" for
+      VMs created before the username field existed. Delegates to
+      blockhost-vm-guest-exec with a `usermod -c` command so all in-VM
+      execution flows through a single primitive. VM must be running with
+      a responsive guest agent.
     args:
       - name: name
         type: positional

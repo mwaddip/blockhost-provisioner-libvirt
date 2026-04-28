@@ -10,13 +10,10 @@ Equivalent to qm.py in the Proxmox provisioner, but uses virsh instead of qm.
 import base64
 import json
 import os
-import re
 import time
 
 from _common import run
-
-# Domain name validation: alphanumeric, hyphens, underscores, dots
-DOMAIN_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
+from blockhost.naming import validate_domain_name
 
 # guest-exec command: qemu-guest-agent rejects payloads over ~4KB. The command
 # itself is evaluated by /bin/sh inside the VM, so shell metacharacters are
@@ -28,10 +25,7 @@ GUEST_EXEC_POLL_INTERVAL = 0.3
 
 def validate_domain(params):
     """Extract and validate domain name from params."""
-    domain = params.get('domain', '')
-    if not isinstance(domain, str) or not DOMAIN_RE.match(domain):
-        raise ValueError(f'Invalid domain name: {domain}')
-    return domain
+    return validate_domain_name(params.get('domain', ''))
 
 
 def _handle_virsh_simple(params, subcommand, timeout=120):

@@ -23,8 +23,10 @@ import shlex
 import subprocess
 import sys
 
+from blockhost.vm_db import get_database
 
-DEFAULT_USERNAME = "admin"
+
+FALLBACK_USERNAME = "admin"
 GUEST_EXEC_CLI = "blockhost-vm-guest-exec"
 
 
@@ -43,12 +45,21 @@ def main():
 
     args = parser.parse_args()
 
+    # Resolve the in-VM username from the DB record. Pre-username VMs (or
+    # records missing for any reason) fall back to "admin" — the only user
+    # any VM created before this change was provisioned with.
+    db = get_database()
+    vm = db.get_vm(args.name)
+    username = (vm.get("username") if vm else None) or FALLBACK_USERNAME
+    if not vm or not vm.get("username"):
+        err(f"WARNING: no username in DB for {args.name}, using fallback {FALLBACK_USERNAME!r}")
+
     gecos = f"wallet={args.wallet_address},nft={args.nft_id}"
-    err(f"Updating GECOS for {args.name}: {gecos}")
+    err(f"Updating GECOS for {args.name} (user {username}): {gecos}")
 
     # shlex.quote protects the sh -c context inside the VM — gecos values
     # contain `,` and `=`, and the wallet address comes from the engine.
-    command = f"usermod -c {shlex.quote(gecos)} {shlex.quote(DEFAULT_USERNAME)}"
+    command = f"usermod -c {shlex.quote(gecos)} {shlex.quote(username)}"
 
     try:
         result = subprocess.run(

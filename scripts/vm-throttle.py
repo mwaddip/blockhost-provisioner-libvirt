@@ -17,14 +17,11 @@ SPECIAL profile: S9 P7 E9 — robustness and reliability paramount.
 """
 
 import argparse
-import re
 import subprocess
 import sys
 
+from blockhost.naming import is_valid_domain_name
 from blockhost.provisioner_libvirt.helpers import get_vm_tap_interface
-
-
-VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
 
 
 def err(msg):
@@ -204,7 +201,7 @@ def main():
 
     # --- Validate ---
 
-    if not VM_NAME_RE.match(args.name):
+    if not is_valid_domain_name(args.name):
         fail(f"Invalid VM name: {args.name!r}")
 
     if args.cpu_shares is not None and not 1 <= args.cpu_shares <= 10000:

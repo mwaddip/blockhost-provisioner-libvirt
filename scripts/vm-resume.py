@@ -15,17 +15,14 @@ Contract:
 """
 
 import argparse
-import re
 import sys
 from datetime import datetime, timedelta, timezone
 
 from blockhost.config import load_db_config
+from blockhost.naming import is_valid_domain_name
 from blockhost.provisioner_libvirt.helpers import get_vm_tap_interface
 from blockhost.root_agent import RootAgentError, call
 from blockhost.vm_db import get_database
-
-
-VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
 
 
 def err(msg):
@@ -54,7 +51,7 @@ Examples:
 
     args = parser.parse_args()
 
-    if not VM_NAME_RE.match(args.name):
+    if not is_valid_domain_name(args.name):
         err(f"Invalid VM name: {args.name!r}")
         return 1
 

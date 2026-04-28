@@ -42,6 +42,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+from blockhost.naming import is_valid_domain_name
+
 
 # --- Constants ---
 
@@ -51,8 +53,6 @@ CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
 DEFAULT_USERNAME = "admin"
 LIBVIRT_QEMU_GROUP = "libvirt-qemu"
 
-# VM name: matches root agent's DOMAIN_RE — alphanumeric, hyphens, underscores, dots
-VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
 def _load_wallet_pattern():
     """Load address format from engine manifest, or accept any non-empty string."""
     try:
@@ -295,7 +295,7 @@ def main():
     args = parser.parse_args()
 
     # --- Validate inputs ---
-    if not VM_NAME_RE.match(args.name):
+    if not is_valid_domain_name(args.name):
         fail(f"Invalid VM name: {args.name!r} (alphanumeric, hyphens, dots; 1-64 chars)")
     if not args.owner_wallet or not args.owner_wallet.strip():
         fail("Empty wallet address")
@@ -622,13 +622,17 @@ def main():
     # --- Register in database ---
 
     try:
+        # vmid=0 is the libvirt sentinel — vm_name is the natural key.
+        # See facts/COMMON_INTERFACE.md (register_vm) and PROVISIONER_INTERFACE.md
+        # §2.1 ("vmid: int or string").
         vm_record = db.register_vm(
             name=args.name,
-            vmid=0,  # libvirt doesn't use numeric VMIDs
+            vmid=0,
             ip=ip,
             ipv6=ipv6,
             expiry_days=args.expiry_days,
             wallet_address=args.owner_wallet,
+            username=args.username,
         )
         err("VM registered in database.")
     except Exception as e:

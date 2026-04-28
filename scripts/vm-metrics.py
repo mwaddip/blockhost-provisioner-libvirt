@@ -16,14 +16,14 @@ SPECIAL profile: S9 P7 E9 — robustness and reliability paramount.
 
 import base64
 import json
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from blockhost.naming import is_valid_domain_name
 
-VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
+
 STATE_DIR = Path("/var/lib/blockhost/metrics")
 
 # virsh domstats state.state → contract state string
@@ -201,7 +201,7 @@ def main():
         sys.exit(1)
 
     name = sys.argv[1]
-    if not VM_NAME_RE.match(name):
+    if not is_valid_domain_name(name):
         fail(f"Invalid VM name: {name!r}")
 
     # --- Collect domstats (single call: CPU, memory, disk, network, state) ---
