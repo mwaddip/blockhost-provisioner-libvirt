@@ -139,14 +139,24 @@ entry_points:
 
   blockhost-vm-gc:
     source: scripts/vm-gc.py
-    status: stub
-    args: ["--execute", "--suspend-only", "--destroy-only", "--grace-days N", "--mock"]
-    notes: Dry-run by default
+    status: implemented
+    args: ["--execute", "--suspend-only", "--destroy-only", "--grace-days N", "--mock", "--verbose"]
+    notes: >
+      Two-phase garbage collection. Phase 1 shuts down expired active VMs
+      and marks them suspended. Phase 2 destroys suspended VMs past the
+      grace period (default from db.yaml gc_grace_days, or 7) by shelling
+      out to blockhost-vm-destroy. Dry-run by default; pass --execute to
+      actually act. Designed to run from systemd timer as the blockhost user.
 
   blockhost-vm-resume:
     source: scripts/vm-resume.py
-    status: stub
+    status: implemented
     args: ["name", "--extend-days N", "--mock", "--dry-run"]
+    notes: >
+      Resumes a suspended VM: virsh-start via root agent, re-applies
+      bridge port isolation (libvirt creates a fresh tap on start), and
+      marks active in DB with new expiry. --extend-days defaults to
+      db.yaml's default_expiry_days (or 30).
 
   blockhost-vm-update-gecos:
     source: scripts/vm-update-gecos.py
