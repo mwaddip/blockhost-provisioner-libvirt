@@ -30,6 +30,7 @@ cleanup on failure can undo partial work.
 """
 
 import argparse
+import atexit
 import grp
 import ipaddress
 import json
@@ -37,6 +38,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
@@ -52,6 +54,11 @@ VM_DISK_DIR = Path("/var/lib/blockhost/vms")
 CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
 DEFAULT_USERNAME = "admin"
 LIBVIRT_QEMU_GROUP = "libvirt-qemu"
+
+# Provisioning lock per facts/PROVISIONER_INTERFACE.md §6a — engine
+# reconcilers check this before reading vms.json so they don't race
+# against in-flight create. Only the create command takes this lock.
+PROVISIONING_LOCK = Path("/run/blockhost/provisioning.lock")
 
 def _load_wallet_pattern():
     """Load address format from engine manifest, or accept any non-empty string."""
@@ -70,6 +77,66 @@ WALLET_RE = _load_wallet_pattern()
 def err(msg):
     """Print to stderr."""
     print(f"[vm-create] {msg}", file=sys.stderr)
+
+
+# --- Provisioning lock ---
+
+
+def _is_pid_alive(pid):
+    """Whether a process with this PID is currently alive.
+
+    PermissionError means the PID exists but is owned by another user —
+    still alive for our purposes.
+    """
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _release_provisioning_lock():
+    """Remove the provisioning lock if we still own it (idempotent)."""
+    try:
+        owner = PROVISIONING_LOCK.read_text().strip()
+        if owner == str(os.getpid()):
+            PROVISIONING_LOCK.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
+
+
+def _acquire_provisioning_lock():
+    """Take /run/blockhost/provisioning.lock for the duration of create.
+
+    Stale-PID detection: if the file exists with a dead PID, remove and
+    proceed. Alive PID → abort.
+
+    Cleanup runs on normal exit (atexit) and on SIGTERM/SIGINT (signal
+    handlers re-raise as SystemExit so atexit fires). A SIGKILL or hard
+    crash leaves a stale lock — the next create's stale-PID check
+    cleans up.
+    """
+    if PROVISIONING_LOCK.exists():
+        try:
+            existing_pid = int(PROVISIONING_LOCK.read_text().strip())
+            if _is_pid_alive(existing_pid):
+                fail(f"Another create operation in progress (pid {existing_pid}). "
+                     f"If this is wrong, remove {PROVISIONING_LOCK} and retry.")
+            err(f"WARNING: removing stale lock {PROVISIONING_LOCK} (pid {existing_pid} dead)")
+        except (ValueError, OSError):
+            err(f"WARNING: removing unreadable lock {PROVISIONING_LOCK}")
+        PROVISIONING_LOCK.unlink(missing_ok=True)
+
+    PROVISIONING_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    PROVISIONING_LOCK.write_text(str(os.getpid()))
+
+    atexit.register(_release_provisioning_lock)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    signal.signal(signal.SIGINT, lambda *_: sys.exit(130))
 
 
 def _set_qemu_perms(path, secure_mode, fallback_mode):
@@ -301,6 +368,12 @@ def main():
         fail("Empty wallet address")
     if WALLET_RE and not WALLET_RE.match(args.owner_wallet):
         fail(f"Invalid wallet address format: {args.owner_wallet!r}")
+
+    # Take the provisioning lock so the engine reconciler defers reading
+    # vms.json while we're modifying it. Mock runs use a separate DB and
+    # don't race against the real engine, so they skip the lock.
+    if not args.mock:
+        _acquire_provisioning_lock()
 
     # Track allocated resources for cleanup on failure
     allocated = {"name": args.name}

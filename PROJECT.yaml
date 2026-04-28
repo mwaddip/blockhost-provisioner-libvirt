@@ -43,6 +43,10 @@ entry_points:
       After domain start, sets bridge port isolation on the VM's tap interface
       via root agent (bridge-port-isolate action) to prevent inter-VM L2 traffic.
       Non-fatal — VM creation succeeds even if isolation fails.
+      Takes /run/blockhost/provisioning.lock per facts/PROVISIONER_INTERFACE.md
+      §6a so engine reconcilers defer while in flight; releases on exit
+      (atexit + SIGTERM/SIGINT handlers). Stale-PID detection on acquire.
+      Skipped when --mock.
     args:
       - name: name
         type: positional
