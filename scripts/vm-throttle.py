@@ -21,6 +21,8 @@ import re
 import subprocess
 import sys
 
+from blockhost.provisioner_libvirt.helpers import get_vm_tap_interface
+
 
 VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
 
@@ -59,18 +61,6 @@ def _get_vm_state(name):
     if rc != 0:
         return None
     return out.strip()
-
-
-def _get_tap_interface(name):
-    """Get the tap interface name for the VM's bridge connection."""
-    rc, out, _ = _run_virsh("domiflist", name)
-    if rc != 0:
-        return None
-    for line in out.strip().splitlines()[2:]:  # skip header + separator
-        parts = line.split()
-        if len(parts) >= 2 and parts[1] == "bridge":
-            return parts[0]
-    return None
 
 
 # --- Limit application ---
@@ -258,7 +248,7 @@ def main():
         or args.reset
     )
     if needs_tap:
-        tap = _get_tap_interface(args.name)
+        tap = get_vm_tap_interface(args.name)
         if not tap and not args.reset:
             fail("Could not determine tap interface for bandwidth limit")
 

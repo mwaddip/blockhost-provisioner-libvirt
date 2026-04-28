@@ -85,6 +85,7 @@ Read `PROJECT.yaml` for the complete machine-readable API specification.
 | `scripts/build-template.sh` | qcow2 template builder |
 | `scripts/provisioner-detect.sh` | Detect libvirt/KVM host |
 | `blockhost/provisioner_libvirt/wizard.py` | Wizard plugin (Blueprint, finalization, summary) |
+| `blockhost/provisioner_libvirt/helpers.py` | Shared read-only helpers for CLI scripts (tap discovery) |
 | `provisioner-hooks/first-boot.sh` | First-boot hook (installs libvirt stack) |
 | `root-agent-actions/virsh.py` | Root agent virsh actions plugin |
 

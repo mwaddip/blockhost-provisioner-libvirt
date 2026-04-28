@@ -311,6 +311,14 @@ root_agent_actions:
         the VM — shell metacharacters are expected, not filtered (the boundary
         is VM-internal). Command size capped at ~4KB (guest-agent limit).
 
+helpers:
+  module: blockhost.provisioner_libvirt.helpers
+  exports:
+    - get_vm_tap_interface(domain) -> Optional[str]
+  notes: >
+    Read-only utilities shared by the libvirt CLI scripts. Mutating
+    operations belong in root-agent-actions/virsh.py.
+
 wizard:
   module: blockhost.provisioner_libvirt.wizard
   session_key: libvirt

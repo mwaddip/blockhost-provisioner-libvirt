@@ -16,11 +16,11 @@ Contract:
 
 import argparse
 import re
-import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
 from blockhost.config import load_db_config
+from blockhost.provisioner_libvirt.helpers import get_vm_tap_interface
 from blockhost.root_agent import RootAgentError, call
 from blockhost.vm_db import get_database
 
@@ -31,27 +31,6 @@ VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
 def err(msg):
     """Print to stderr with a consistent prefix."""
     print(f"[vm-resume] {msg}", file=sys.stderr)
-
-
-def _get_vm_tap_interface(domain):
-    """Discover the tap device for a domain's bridge interface.
-
-    Read-only — blockhost user has virsh access without root agent.
-    """
-    try:
-        r = subprocess.run(
-            ["virsh", "domiflist", domain],
-            capture_output=True, text=True, timeout=5,
-        )
-        if r.returncode != 0:
-            return None
-        for line in r.stdout.strip().splitlines()[2:]:  # skip header + separator
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] == "bridge":
-                return parts[0]
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-    return None
 
 
 def main():
@@ -140,7 +119,7 @@ Examples:
     # Re-apply bridge port isolation (libvirt creates a new tap on start;
     # isolation from the original vm-create is gone). Non-fatal — VM works
     # without it, but inter-VM L2 traffic would be possible.
-    tap = _get_vm_tap_interface(args.name)
+    tap = get_vm_tap_interface(args.name)
     if tap:
         try:
             r = call("bridge-port-isolate", dev=tap)

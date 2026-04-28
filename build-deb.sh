@@ -164,6 +164,7 @@ WIZARD_PKG_DIR="${PKG}/usr/lib/python3/dist-packages/blockhost/provisioner_libvi
 mkdir -p "${WIZARD_PKG_DIR}/templates/provisioner_libvirt"
 cp "${SCRIPT_DIR}/blockhost/provisioner_libvirt/__init__.py" "${WIZARD_PKG_DIR}/"
 cp "${SCRIPT_DIR}/blockhost/provisioner_libvirt/wizard.py" "${WIZARD_PKG_DIR}/"
+cp "${SCRIPT_DIR}/blockhost/provisioner_libvirt/helpers.py" "${WIZARD_PKG_DIR}/"
 if ls "${SCRIPT_DIR}/blockhost/provisioner_libvirt/templates/provisioner_libvirt/"*.html >/dev/null 2>&1; then
     cp "${SCRIPT_DIR}/blockhost/provisioner_libvirt/templates/provisioner_libvirt/"*.html "${WIZARD_PKG_DIR}/templates/provisioner_libvirt/"
 fi

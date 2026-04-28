@@ -41,26 +41,12 @@ echo "VM started: $VM_NAME" >&2
 # original vm-create is lost, so we must re-apply it.
 
 VM_NAME="$VM_NAME" python3 -c "
-import os, subprocess, sys
+import os, sys
+from blockhost.provisioner_libvirt.helpers import get_vm_tap_interface
 from blockhost.root_agent import call
 
 domain = os.environ['VM_NAME']
-
-# Discover tap interface (read-only — blockhost user has virsh access)
-try:
-    r = subprocess.run(
-        ['virsh', 'domiflist', domain],
-        capture_output=True, text=True, timeout=5,
-    )
-    tap = None
-    if r.returncode == 0:
-        for line in r.stdout.strip().splitlines()[2:]:
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] == 'bridge':
-                tap = parts[0]
-                break
-except Exception:
-    tap = None
+tap = get_vm_tap_interface(domain)
 
 if not tap:
     print('WARNING: Could not determine tap interface for bridge port isolation', file=sys.stderr)
