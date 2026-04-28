@@ -22,7 +22,6 @@ package:
     - virtinst
     - cloud-image-utils
     - libguestfs-tools
-    - python3-libvirt
 
 manifest:
   path: /usr/share/blockhost/provisioner.json
@@ -296,9 +295,6 @@ root_agent_actions:
       params: {domain: string}
       runs: "virsh shutdown <domain>"
       notes: Graceful ACPI, 300s timeout
-    virsh-reboot:
-      params: {domain: string}
-      runs: "virsh reboot <domain>"
     virsh-define:
       params: {xml_path: string}
       runs: "virsh define <xml_path>"
@@ -306,14 +302,6 @@ root_agent_actions:
     virsh-undefine:
       params: {domain: string, remove_storage: bool}
       runs: "virsh undefine <domain> [--remove-all-storage]"
-    virsh-update-gecos:
-      params: {domain: string, username: string, gecos: string}
-      runs: "virsh qemu-agent-command <domain> (guest-exec usermod -c <gecos> <username>)"
-      notes: >
-        Purpose-built action, validates username and GECOS format.
-        No longer called by vm-update-gecos.py (which now delegates to
-        virsh-guest-exec); retained for backward compatibility with any
-        external callers until the facts contract drops it.
     virsh-guest-exec:
       params: {domain: string, command: string}
       runs: "virsh qemu-agent-command <domain> (guest-exec /bin/sh -c <command>)"
@@ -368,7 +356,6 @@ first_boot_hook:
     - virtinst
     - cloud-image-utils
     - libguestfs-tools
-    - python3-libvirt
     - python3-ecdsa
     - jq
   step_markers:

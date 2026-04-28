@@ -596,7 +596,7 @@ def main():
     # --- Define + start domain via root agent ---
 
     try:
-        from blockhost.root_agent import call, RootAgentError
+        from blockhost.root_agent import call
 
         result = call("virsh-define", xml_path=str(xml_path))
         if not result.get("ok"):
@@ -648,7 +648,6 @@ def main():
             vmid=0,  # libvirt doesn't use numeric VMIDs
             ip=ip,
             ipv6=ipv6,
-            owner=args.owner_wallet,
             expiry_days=args.expiry_days,
             wallet_address=args.owner_wallet,
         )

@@ -45,7 +45,6 @@ if [ ! -f "$STEP_LIBVIRT" ]; then
         virtinst \
         cloud-image-utils \
         libguestfs-tools \
-        python3-libvirt \
         python3-ecdsa \
         jq
 

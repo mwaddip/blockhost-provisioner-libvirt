@@ -123,19 +123,6 @@ if ! virt-customize -a "$TEMPLATE_STAGING" \
     \
     --install "cloud-init,qemu-guest-agent,sudo,curl" \
     \
-    --write '/etc/pam.d/sshd:# PAM configuration for SSH — web3 auth via libpam-web3
-# Standard preamble
-@include common-auth
-account    required     pam_nologin.so
-@include common-account
-session [success=ok ignore=ignore module_unknown=ignore default=bad]        pam_selinux.so close
-session    required     pam_loginuid.so
-session    optional     pam_keyinit.so force revoke
-@include common-session
-session [success=ok ignore=ignore module_unknown=ignore default=bad]        pam_selinux.so open
-@include common-password
-session    optional     pam_mail.so standard nostrstrenv nstrstrstrenv' \
-    \
     --write '/etc/ssh/sshd_config.d/50-blockhost.conf:# BlockHost SSH configuration
 # Challenge-response for PAM-based web3 auth
 ChallengeResponseAuthentication yes
