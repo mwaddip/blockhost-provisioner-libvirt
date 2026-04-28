@@ -30,11 +30,13 @@ cleanup on failure can undo partial work.
 """
 
 import argparse
+import grp
 import ipaddress
 import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -47,6 +49,7 @@ TEMPLATE_IMAGE = Path("/var/lib/blockhost/templates/blockhost-base.qcow2")
 VM_DISK_DIR = Path("/var/lib/blockhost/vms")
 CLOUD_INIT_DIR = Path("/var/lib/blockhost/cloud-init")
 DEFAULT_USERNAME = "admin"
+LIBVIRT_QEMU_GROUP = "libvirt-qemu"
 
 # VM name: matches root agent's DOMAIN_RE — alphanumeric, hyphens, underscores, dots
 VM_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$')
@@ -67,6 +70,29 @@ WALLET_RE = _load_wallet_pattern()
 def err(msg):
     """Print to stderr."""
     print(f"[vm-create] {msg}", file=sys.stderr)
+
+
+def _set_qemu_perms(path, secure_mode, fallback_mode):
+    """Set ownership/perms so libvirt-qemu can access the file or directory.
+
+    Tries: chgrp libvirt-qemu + secure_mode (group-readable, no world).
+    Falls back to fallback_mode (world-readable) if the group doesn't exist
+    or chgrp fails — keeps the deployment working at the cost of confidentiality.
+    """
+    try:
+        grp.getgrnam(LIBVIRT_QEMU_GROUP)
+    except KeyError:
+        err(f"WARNING: group {LIBVIRT_QEMU_GROUP} not found; using permissive mode on {path}")
+        os.chmod(path, fallback_mode)
+        return
+
+    try:
+        shutil.chown(path, group=LIBVIRT_QEMU_GROUP)
+        os.chmod(path, secure_mode)
+    except (PermissionError, OSError) as e:
+        err(f"WARNING: chgrp {LIBVIRT_QEMU_GROUP} failed on {path} ({e}); "
+            f"using permissive mode. Is the blockhost user in the libvirt-qemu group?")
+        os.chmod(path, fallback_mode)
 
 
 def fail(msg, allocated=None):
@@ -324,7 +350,8 @@ def main():
     except Exception:
         err("WARNING: broker allocation not available, IPv6 will be empty")
 
-    # Bridge name from db.yaml (written by main repo's first-boot)
+    # Bridge name from db.yaml (written by wizard's finalize_db_config,
+    # which discovers it from /run/blockhost/bridge during finalize_network)
     bridge_name = db_config.get("bridge", "br0")
 
     # --- Validate prerequisites ---
@@ -332,11 +359,14 @@ def main():
     if not TEMPLATE_IMAGE.exists():
         fail(f"Template image not found: {TEMPLATE_IMAGE} (run blockhost-build-template first)")
 
-    # Ensure directories are traversable by libvirt-qemu (o+rx)
+    # Ensure directories are traversable by libvirt-qemu (group, not world).
+    # Old code added o+rx — that let any local user list VM names and read
+    # cloud-init artifacts (which contain SECRET_KEY and wallet address).
     for d in (TEMPLATE_IMAGE.parent, VM_DISK_DIR, CLOUD_INIT_DIR):
         d.mkdir(parents=True, exist_ok=True)
-        st = d.stat()
-        d.chmod(st.st_mode | 0o005)  # add o+rx
+        # 0o710: owner rwx, group x (traverse), no world. 0o755 fallback only
+        # if the libvirt-qemu group is unavailable (broken deployment).
+        _set_qemu_perms(d, secure_mode=0o710, fallback_mode=0o755)
 
 
     disk_path = VM_DISK_DIR / f"{args.name}.qcow2"
@@ -401,7 +431,8 @@ def main():
 
     ci_dir = CLOUD_INIT_DIR / args.name
     ci_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(ci_dir, 0o755)  # traversable by libvirt-qemu
+    # 0o710: owner rwx, group x for libvirt-qemu (traversal so it can read the ISO).
+    _set_qemu_perms(ci_dir, secure_mode=0o710, fallback_mode=0o755)
     allocated["cloud_init_dir"] = str(ci_dir)
 
     user_data_path = ci_dir / "user-data"
@@ -456,8 +487,10 @@ def main():
         except Exception as e:
             fail(f"Failed to render cloud-init: {e}", allocated)
 
-    # Write user-data file
+    # Write user-data file. Owner-only — qemu reads cidata.iso, not the
+    # loose YAML, and user-data carries SECRET_KEY + wallet in cleartext.
     user_data_path.write_text(user_data)
+    os.chmod(user_data_path, 0o600)
 
     # Write network-config for static IP assignment
     network_config_path = ci_dir / "network-config"
@@ -482,6 +515,8 @@ def main():
         except (KeyError, ValueError):
             pass
 
+    # Single `routes:` block for both v4 default and v6 entries —
+    # `gateway4:` is deprecated since netplan 22.04.
     network_config = (
         f"version: 2\n"
         f"ethernets:\n"
@@ -490,14 +525,15 @@ def main():
         f'      macaddress: "{mac_address}"\n'
         f"    addresses:\n"
         f"{addresses_lines}"
-        f"    gateway4: {gateway}\n"
         f"    nameservers:\n"
         f"      addresses:\n"
         f"        - {gateway}\n"
+        f"    routes:\n"
+        f'      - to: "default"\n'
+        f'        via: "{gateway}"\n'
     )
     if ipv6_gateway:
         network_config += (
-            f"    routes:\n"
             f'      - to: "{ipv6_gateway}/128"\n'
             f"        scope: link\n"
             f'      - to: "::/0"\n'
@@ -519,7 +555,9 @@ def main():
     except FileNotFoundError:
         fail("cloud-localds not found (install cloud-image-utils)", allocated)
 
-    os.chmod(ci_iso_path, 0o644)
+    # The ISO contains user-data, so it gets the same protection: group-readable
+    # only (libvirt-qemu attaches it as CDROM), not world-readable.
+    _set_qemu_perms(ci_iso_path, secure_mode=0o640, fallback_mode=0o644)
     err("Cloud-init ISO created.")
 
     # --- Create disk overlay ---
@@ -537,7 +575,9 @@ def main():
     except subprocess.CalledProcessError as e:
         fail(f"qemu-img create failed: {e.stderr.strip()}", allocated)
 
-    os.chmod(disk_path, 0o644)
+    # Disk image: group-readable for libvirt-qemu (libvirt's dynamic_ownership
+    # takes it from here). World-readable would expose tenant disk content.
+    _set_qemu_perms(disk_path, secure_mode=0o640, fallback_mode=0o644)
     allocated["disk_path"] = str(disk_path)
     err(f"Disk overlay created: {disk_path}")
 

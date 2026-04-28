@@ -53,10 +53,15 @@ if [ ! -f "$STEP_LIBVIRT" ]; then
     systemctl enable libvirtd
     systemctl start libvirtd
 
-    # Add blockhost user to libvirt group
+    # Add blockhost user to libvirt and libvirt-qemu groups.
+    # libvirt: lets blockhost talk to libvirtd via the unix socket.
+    # libvirt-qemu: lets blockhost chgrp cloud-init/disk files to a group
+    # qemu can read, so user-data (containing PAM SECRET_KEY and wallet)
+    # need not be world-readable.
     if id blockhost >/dev/null 2>&1; then
         usermod -aG libvirt blockhost
-        log "Added blockhost user to libvirt group."
+        usermod -aG libvirt-qemu blockhost
+        log "Added blockhost user to libvirt and libvirt-qemu groups."
     fi
 
     touch "$STEP_LIBVIRT"

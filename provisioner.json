@@ -25,13 +25,13 @@
     "first_boot_hook": "/usr/share/blockhost/provisioner-hooks/first-boot.sh",
     "detect":          "blockhost-provisioner-detect",
     "wizard_module":   "blockhost.provisioner_libvirt.wizard",
-    "finalization_steps": ["storage", "network", "template"]
+    "finalization_steps": ["storage", "network", "db_config", "template"]
   },
 
   "root_agent_actions": "/usr/share/blockhost/root-agent-actions/virsh.py",
 
   "config_keys": {
     "session_key": "libvirt",
-    "provisioner_config": ["storage_pool"]
+    "provisioner_config": ["db_file", "storage_pool", "storage_path", "bridge", "gc_grace_days", "ip_pool"]
   }
 }

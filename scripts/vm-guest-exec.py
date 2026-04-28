@@ -63,6 +63,13 @@ def main():
         err(f"Root agent error: {exc}")
         sys.exit(1)
 
+    # Distinguish host-side rejection (validation, guest-agent unreachable)
+    # from in-VM command failure. Without this, both paths returned exit 1
+    # with no diagnostic — the host-side error message was swallowed.
+    if not result.get('ok', False):
+        err(f"Guest agent failed: {result.get('error', 'unknown error')}")
+        sys.exit(1)
+
     stdout = result.get('stdout', '')
     stderr = result.get('stderr', '')
     exitcode = int(result.get('exitcode', 1))

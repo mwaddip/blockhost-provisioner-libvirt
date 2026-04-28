@@ -345,6 +345,14 @@ wizard:
       display: "Configure network"
       function: finalize_network
       status: implemented
+    - id: db_config
+      display: "Writing provisioner config"
+      function: finalize_db_config
+      status: implemented
+      notes: >
+        Writes /etc/blockhost/db.yaml with provisioner runtime config:
+        db_file, storage_pool, storage_path, bridge, gc_grace_days, ip_pool.
+        Runs after finalize_network so the discovered bridge is available.
     - id: template
       display: "Build VM template"
       function: finalize_template
@@ -370,7 +378,12 @@ first_boot_hook:
 config_keys:
   session_key: libvirt
   provisioner_config:
+    - db_file
     - storage_pool
+    - storage_path
+    - bridge
+    - gc_grace_days
+    - ip_pool
   files_read:
     - path: /etc/blockhost/db.yaml
       keys: [storage_pool, bridge, gateway, ip_pool, grace_days]

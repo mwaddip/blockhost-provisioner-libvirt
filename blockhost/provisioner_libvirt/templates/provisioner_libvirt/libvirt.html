@@ -39,34 +39,6 @@
         </div>
 
         <div class="form-section">
-            <h3>Network</h3>
-            <p class="text-muted mb-2" style="font-size: 0.875rem;">
-                VMs use NAT via libvirt's default network.
-                IPv6 is routed end-to-end via WireGuard tunnel.
-            </p>
-            {% if detected.wan_interfaces|length > 1 %}
-            <div class="form-group">
-                <label for="wan_interface">WAN interface</label>
-                <select id="wan_interface" name="wan_interface">
-                    {% for iface in detected.wan_interfaces %}
-                    <option value="{{ iface }}">{{ iface }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% elif detected.wan_interfaces|length == 1 %}
-            <input type="hidden" name="wan_interface" value="{{ detected.wan_interfaces[0] }}">
-            <div class="form-group">
-                <label>WAN interface</label>
-                <input type="text" value="{{ detected.wan_interfaces[0] }}" disabled readonly>
-            </div>
-            {% else %}
-            <div class="alert alert-warning">
-                No WAN interface detected (no default route found).
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="form-section">
             <h3>Lifecycle</h3>
             <div class="form-group">
                 <label for="gc_grace_days">Grace period before VM destruction (days)</label>

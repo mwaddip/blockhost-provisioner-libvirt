@@ -3,7 +3,7 @@ libvirt/KVM wizard plugin for BlockHost installer.
 
 Provides:
 - Flask Blueprint with /wizard/libvirt route
-- Finalization steps: storage, network, template
+- Finalization steps: storage, network, db_config, template
 - Summary data for the summary page
 """
 
@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
+import yaml
 from flask import Blueprint, redirect, render_template, request, session, url_for
 
 blueprint = Blueprint(
@@ -31,21 +32,19 @@ def wizard_libvirt():
     detected = _detect_libvirt_resources()
 
     if request.method == "POST":
-        # Query actual DHCP range from the default network if libvirtd is running
+        # The default libvirt network's DHCP range is used as the BlockHost
+        # IP pool — it's the only routable RFC1918 subnet on a fresh install.
+        # finalize_network disables the libvirt default after we've harvested
+        # the range here.
         dhcp = detected.get("default_network_dhcp", {})
-        ip_network = dhcp.get("network", "192.168.122.0/24")
-        ip_start = dhcp.get("start", "192.168.122.2")
-        ip_end = dhcp.get("end", "192.168.122.254")
-        gateway = dhcp.get("gateway", "192.168.122.1")
 
         session["libvirt"] = {
             "storage_pool": request.form.get("storage_pool", "blockhost"),
             "storage_path": request.form.get("storage_path", "/var/lib/blockhost/vms"),
-            "wan_interface": request.form.get("wan_interface", ""),
-            "ip_network": ip_network,
-            "ip_start": ip_start,
-            "ip_end": ip_end,
-            "gateway": gateway,
+            "ip_network": dhcp.get("network", "192.168.122.0/24"),
+            "ip_start": dhcp.get("start", "192.168.122.2"),
+            "ip_end": dhcp.get("end", "192.168.122.254"),
+            "gateway": dhcp.get("gateway", "192.168.122.1"),
             "gc_grace_days": int(request.form.get("gc_grace_days", 7)),
         }
         return redirect(url_for("wizard_connectivity"))
@@ -71,7 +70,6 @@ def get_summary_data(session_data: dict) -> dict:
     return {
         "storage_pool": libvirt.get("storage_pool"),
         "storage_path": libvirt.get("storage_path"),
-        "wan_interface": libvirt.get("wan_interface"),
         "gc_grace_days": libvirt.get("gc_grace_days", 7),
     }
 
@@ -89,10 +87,13 @@ def get_finalization_steps() -> list[tuple]:
 
     Each tuple: (step_id, display_name, callable)
     The callable signature: func(config: dict) -> tuple[bool, Optional[str]]
+
+    db_config runs after network so the discovered bridge is available.
     """
     return [
         ("storage", "Configuring storage pool", finalize_storage),
         ("network", "Configuring network", finalize_network),
+        ("db_config", "Writing provisioner config", finalize_db_config),
         ("template", "Building VM template", finalize_template,
          "(this may take several minutes)"),
     ]
@@ -192,22 +193,65 @@ def finalize_network(config: dict) -> tuple[bool, Optional[str]]:
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         return (False, f"Cannot check bridge '{bridge_name}': {e}")
 
-    # Disable default NAT network to avoid virbr0 subnet collisions
-    subprocess.run(
+    # Disable default NAT network to avoid virbr0 subnet collisions.
+    # Failure here previously went silent — virbr0 staying up is the bug
+    # finalize_network exists to prevent. Treat already-inactive / not-found
+    # as benign; everything else is an error.
+    for cmd in (
         ["virsh", "net-destroy", "default"],
-        capture_output=True, timeout=10,
-    )
-    subprocess.run(
         ["virsh", "net-autostart", "default", "--disable"],
-        capture_output=True, timeout=10,
-    )
+    ):
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            stderr_lower = (result.stderr or "").strip().lower()
+            if "is not active" in stderr_lower or "not found" in stderr_lower:
+                continue
+            return (False, f"{' '.join(cmd)} failed: {result.stderr.strip()}")
 
-    # Store bridge name in config for later use
+    # Store bridge name in config for later use (finalize_db_config persists it)
     provisioner = config.get("provisioner", {})
     provisioner["bridge"] = bridge_name
     config["provisioner"] = provisioner
 
     return (True, None)
+
+
+def finalize_db_config(config: dict) -> tuple[bool, Optional[str]]:
+    """Write /etc/blockhost/db.yaml with the provisioner's runtime config.
+
+    Mirror of the Proxmox provisioner's equivalent step. Without this, the
+    bridge name and IP pool collected in the wizard never reach disk —
+    vm-create then falls back to defaults that only work coincidentally.
+
+    Reads from the in-memory config dict (populated by the POST handler
+    and finalize_network). Writes to /etc/blockhost/db.yaml.
+    """
+    try:
+        provisioner = config.get("provisioner", {})
+
+        db_config = {
+            "db_file": "/var/lib/blockhost/vm-db.json",
+            "storage_pool": provisioner.get("storage_pool", "blockhost"),
+            "storage_path": provisioner.get("storage_path", "/var/lib/blockhost/vms"),
+            "bridge": provisioner.get("bridge", "br0"),
+            "gc_grace_days": int(provisioner.get("gc_grace_days", 7)),
+            "ip_pool": {
+                "network": provisioner.get("ip_network", "192.168.122.0/24"),
+                "start": provisioner.get("ip_start", "192.168.122.2"),
+                "end": provisioner.get("ip_end", "192.168.122.254"),
+                "gateway": provisioner.get("gateway", "192.168.122.1"),
+            },
+        }
+
+        config_dir = Path("/etc/blockhost")
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        db_yaml_path = config_dir / "db.yaml"
+        db_yaml_path.write_text(yaml.dump(db_config, default_flow_style=False))
+
+        return (True, None)
+    except Exception as e:
+        return (False, f"Failed to write db.yaml: {e}")
 
 
 def finalize_template(config: dict) -> tuple[bool, Optional[str]]:
@@ -315,8 +359,6 @@ def _detect_libvirt_resources() -> dict:
     detected = {
         "kvm_available": os.path.exists("/dev/kvm"),
         "libvirtd_running": False,
-        "storage_pools": [],
-        "wan_interfaces": [],
         "default_network_dhcp": {},
     }
 
@@ -330,37 +372,7 @@ def _detect_libvirt_resources() -> dict:
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
 
-    # List existing storage pools
-    try:
-        result = subprocess.run(
-            ["virsh", "pool-list", "--name"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            detected["storage_pools"] = [
-                p.strip() for p in result.stdout.strip().split("\n") if p.strip()
-            ]
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-
-    # Detect WAN interface(s) — the one(s) with a default route
-    try:
-        result = subprocess.run(
-            ["ip", "route", "show", "default"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                parts = line.split()
-                try:
-                    dev_idx = parts.index("dev")
-                    detected["wan_interfaces"].append(parts[dev_idx + 1])
-                except (ValueError, IndexError):
-                    pass
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-
-    # Detect default network DHCP range
+    # Detect default network DHCP range — used as the BlockHost IP pool
     if detected["libvirtd_running"]:
         detected["default_network_dhcp"] = _get_default_network_dhcp()
 
