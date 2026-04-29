@@ -42,6 +42,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 from blockhost.naming import is_valid_domain_name
@@ -59,6 +60,14 @@ LIBVIRT_QEMU_GROUP = "libvirt-qemu"
 # reconcilers check this before reading vms.json so they don't race
 # against in-flight create. Only the create command takes this lock.
 PROVISIONING_LOCK = Path("/run/blockhost/provisioning.lock")
+
+# Guest-readiness wait (per facts/PROVISIONER_INTERFACE.md, vm-create §
+# Guest readiness). The engine calls network_hook + update-gecos via
+# guest-exec immediately after vm-create returns; if the agent isn't up,
+# those fail and the VM ships without a working GECOS for libpam-web3.
+GUEST_READY_TIMEOUT_SECONDS = 180
+GUEST_READY_POLL_INTERVAL = 3
+GUEST_PING_TIMEOUT = 3
 
 def _load_wallet_pattern():
     """Load address format from engine manifest, or accept any non-empty string."""
@@ -269,6 +278,38 @@ def _get_bridge_gateway(bridge_name):
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return None
+
+
+def _wait_for_guest_ready(name, timeout_seconds=GUEST_READY_TIMEOUT_SECONDS):
+    """Poll guest-ping until the QEMU guest agent answers, or timeout.
+
+    cloud-init brings qemu-guest-agent up partway through first boot;
+    the timeout has to cover slow disks and nested virt. Direct virsh
+    call (no root agent): the local socket already permits read-only
+    and qemu-agent-command for the blockhost user, same path
+    vm-metrics.py uses for guest-ping.
+
+    Returns True on first successful ping, False on overall timeout.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    ping_cmd = json.dumps({"execute": "guest-ping"})
+    err(f"Waiting for guest agent (up to {timeout_seconds}s)...")
+    while time.monotonic() < deadline:
+        try:
+            result = subprocess.run(
+                ["virsh", "qemu-agent-command", name, ping_cmd,
+                 "--timeout", str(GUEST_PING_TIMEOUT)],
+                capture_output=True, text=True,
+                timeout=GUEST_PING_TIMEOUT + 3,
+            )
+            if result.returncode == 0:
+                err("Guest agent ready.")
+                return True
+        except (subprocess.SubprocessError, OSError):
+            pass
+        time.sleep(GUEST_READY_POLL_INTERVAL)
+    err(f"Guest agent did not respond within {timeout_seconds}s.")
+    return False
 
 
 def generate_domain_xml(name, cpu, memory_mb, disk_path, cloud_init_iso, bridge_name,
@@ -692,6 +733,18 @@ def main():
         except Exception as e:
             # Non-fatal — VM works without IPv6 route
             err(f"WARNING: Failed to add IPv6 route: {e}")
+
+    # --- Wait for guest agent readiness ---
+    # The engine fires network_hook + update-gecos via guest-exec the
+    # moment we return. If qemu-guest-agent isn't up, those fail and the
+    # customer's VM has no GECOS — libpam-web3 can't authenticate ssh.
+    # Block here until the agent answers, or destroy the partial VM.
+    if not _wait_for_guest_ready(args.name):
+        fail(
+            f"Guest agent not responsive within {GUEST_READY_TIMEOUT_SECONDS}s "
+            f"(cloud-init still running or VM hung)",
+            allocated,
+        )
 
     # --- Register in database ---
 
