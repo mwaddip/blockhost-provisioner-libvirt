@@ -54,11 +54,20 @@ entry_points:
       the moment vm-create returns, so the agent must be up first. On timeout,
       _cleanup_partial destroys the partial VM and exits non-zero — no
       BLOCKHOST_RESULT line is printed. Skipped on dry-run.
-      Calls blockhost.vm_db.register_vm(vmid=0, owner=wallet, wallet_address=wallet)
-      after the guest agent is ready but before printing the result line — provisioner
-      owns VM-record creation per facts/PROVISIONER_INTERFACE.md §2 (create →
-      Database side effects). On register_vm failure, _cleanup_partial tears the
-      VM down before exiting non-zero.
+      Calls blockhost.vm_db.register_vm(vmid=0, owner=wallet, wallet_address=wallet,
+      network_mode=<resolved>) after the guest agent is ready but before printing
+      the result line — provisioner owns VM-record creation per
+      facts/PROVISIONER_INTERFACE.md §2 (create → Database side effects). On
+      register_vm failure, _cleanup_partial tears the VM down before exiting non-zero.
+      Active network_mode is resolved by listing /etc/blockhost/network-modes.enabled/
+      (apache available/enabled pattern) and taking the basename of the single .json
+      symlink there. Zero entries → fail "no network mode enabled". Two-or-more →
+      fail "multiple modes enabled but no per-VM resolver wired" (multi-mode is
+      out of scope for this version). The resolver runs after config loading but
+      before any resource allocation, so failures leave no partial state and apply
+      to dry-run too. Per facts/NETWORK_INTERFACE.md §6 the snapshot is immutable
+      after vm-create — the engine drives per-VM dispatch through
+      blockhost-network-hook (provisioner does not invoke network plugins itself).
       Result line on stdout is prefixed with the literal string `BLOCKHOST_RESULT: `
       (single trailing space) per facts/PROVISIONER_INTERFACE.md §2 Common
       Conventions; emitted on both --apply success and dry-run.
@@ -413,6 +422,12 @@ config_keys:
       keys: [auth.otp_length, auth.otp_ttl_seconds]
     - path: /etc/blockhost/broker-allocation.json
       keys: [prefix, gateway, dns_zone]
+    - path: /etc/blockhost/network-modes.enabled/
+      keys: ["<basename>.json"]
+      notes: >
+        vm-create resolves the active network_mode by listing this directory
+        (apache available/enabled pattern). Single .json entry → its basename
+        is snapshotted into the VM record via register_vm.
 
 paths:
   template_image: /var/lib/blockhost/templates/blockhost-base.qcow2

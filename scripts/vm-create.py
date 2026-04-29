@@ -61,6 +61,11 @@ LIBVIRT_QEMU_GROUP = "libvirt-qemu"
 # against in-flight create. Only the create command takes this lock.
 PROVISIONING_LOCK = Path("/run/blockhost/provisioning.lock")
 
+# Network mode is snapshotted into the vm-db record at register_vm time
+# (facts/NETWORK_INTERFACE.md §6, facts/PROVISIONER_INTERFACE.md vm-create
+# step 2). With one symlink in enabled/, the answer is its basename.
+NETWORK_MODES_ENABLED_DIR = Path("/etc/blockhost/network-modes.enabled")
+
 # Guest-readiness wait (per facts/PROVISIONER_INTERFACE.md, vm-create §
 # Guest readiness). The engine calls network_hook + update-gecos via
 # guest-exec immediately after vm-create returns; if the agent isn't up,
@@ -280,6 +285,29 @@ def _get_bridge_gateway(bridge_name):
     return None
 
 
+def _resolve_network_mode():
+    """Return the basename of the single mode symlinked into network-modes.enabled/.
+
+    apache sites-available/sites-enabled pattern: every installed plugin
+    has a manifest in available/, and active modes appear as symlinks
+    under enabled/. With one entry, take its basename minus .json.
+    Multi-mode is out of scope here — a per-VM resolver (plan id, wizard
+    choice) would pick from the enabled set.
+
+    Calls fail() on any error (no resources have been allocated yet at
+    the call site, so no cleanup is needed).
+    """
+    if not NETWORK_MODES_ENABLED_DIR.is_dir():
+        fail(f"No network mode enabled: {NETWORK_MODES_ENABLED_DIR} does not exist")
+    enabled = sorted(p for p in NETWORK_MODES_ENABLED_DIR.iterdir() if p.suffix == ".json")
+    if not enabled:
+        fail(f"No network mode enabled in {NETWORK_MODES_ENABLED_DIR}")
+    if len(enabled) > 1:
+        names = ", ".join(p.stem for p in enabled)
+        fail(f"Multiple modes enabled ({names}) but no per-VM resolver wired")
+    return enabled[0].stem
+
+
 def _wait_for_guest_ready(name, timeout_seconds=GUEST_READY_TIMEOUT_SECONDS):
     """Poll guest-ping until the QEMU guest agent answers, or timeout.
 
@@ -445,6 +473,12 @@ def main():
     # Bridge name from db.yaml (written by wizard's finalize_db_config,
     # which discovers it from /run/blockhost/bridge during finalize_network)
     bridge_name = db_config.get("bridge", "br0")
+
+    # Snapshot the active network mode into the VM record. Required by
+    # facts/COMMON_INTERFACE.md §2 (register_vm rejects empty network_mode)
+    # and consumed by blockhost-network-hook for per-VM dispatch.
+    network_mode = _resolve_network_mode()
+    err(f"Active network mode: {network_mode}")
 
     # --- Validate prerequisites ---
 
@@ -761,6 +795,7 @@ def main():
             expiry_days=args.expiry_days,
             wallet_address=args.owner_wallet,
             username=args.username,
+            network_mode=network_mode,
         )
         err("VM registered in database.")
     except Exception as e:
