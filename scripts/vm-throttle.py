@@ -39,10 +39,15 @@ def fail(msg):
 
 
 def _run_virsh(*args, timeout=10):
-    """Run a virsh command. Returns (returncode, stdout, stderr)."""
+    """Run a virsh command. Returns (returncode, stdout, stderr).
+
+    -c qemu:///system is required: the blockhost user is in the libvirt
+    group but virsh defaults to qemu:///session (per-user namespace, no
+    managed domains) without an explicit URI.
+    """
     try:
         result = subprocess.run(
-            ["virsh"] + list(args),
+            ["virsh", "-c", "qemu:///system"] + list(args),
             capture_output=True, text=True, timeout=timeout,
         )
         return result.returncode, result.stdout, result.stderr

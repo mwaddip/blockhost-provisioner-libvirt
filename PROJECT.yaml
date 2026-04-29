@@ -47,13 +47,18 @@ entry_points:
       §6a so engine reconcilers defer while in flight; releases on exit
       (atexit + SIGTERM/SIGINT handlers). Stale-PID detection on acquire.
       Skipped when --mock.
-      With --apply, polls virsh qemu-agent-command guest-ping after the domain
-      is started, blocking until the QEMU guest agent answers (180s timeout,
-      3s poll interval) per facts/PROVISIONER_INTERFACE.md §2 (create → Guest
-      readiness). The engine fires network_hook and update-gecos via guest-exec
-      the moment vm-create returns, so the agent must be up first. On timeout,
-      _cleanup_partial destroys the partial VM and exits non-zero — no
-      BLOCKHOST_RESULT line is printed. Skipped on dry-run.
+      With --apply, polls `virsh -c qemu:///system qemu-agent-command guest-ping`
+      after the domain is started, blocking until the QEMU guest agent answers
+      (180s timeout, 3s poll interval) per facts/PROVISIONER_INTERFACE.md §2
+      (create → Guest readiness). The engine fires network_hook and update-gecos
+      via guest-exec the moment vm-create returns, so the agent must be up first.
+      On timeout, _cleanup_partial destroys the partial VM and exits non-zero —
+      no BLOCKHOST_RESULT line is printed. Skipped on dry-run.
+      All direct virsh calls (here and in vm-metrics, vm-throttle, vm-list,
+      vm-status, vm-destroy, helpers.get_vm_tap_interface) pass `-c qemu:///system`
+      explicitly: the blockhost user is in the libvirt group but virsh defaults
+      to qemu:///session (per-user namespace, no managed domains) without an
+      explicit URI — without the flag, every domain lookup fails until timeout.
       Calls blockhost.vm_db.register_vm(vmid=0, owner=wallet, wallet_address=wallet,
       network_mode=<resolved>) after the guest agent is ready but before printing
       the result line — provisioner owns VM-record creation per

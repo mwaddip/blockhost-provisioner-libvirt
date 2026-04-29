@@ -38,9 +38,12 @@ log() {
 # virsh destroy = force power off (confusing libvirt naming).
 # Idempotent: "domain is not running" or "domain not found" are both fine.
 
+# -c qemu:///system on every virsh call: the blockhost user is in the
+# libvirt group, but virsh defaults to qemu:///session (no managed domains)
+# without an explicit URI.
 log "Stopping domain (if running)..."
-if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
-    STATE=$(virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+if virsh -c qemu:///system dominfo "$VM_NAME" >/dev/null 2>&1; then
+    STATE=$(virsh -c qemu:///system domstate "$VM_NAME" 2>/dev/null || echo "unknown")
     if [ "$STATE" = "running" ]; then
         VM_NAME="$VM_NAME" python3 -c "
 import os
@@ -60,7 +63,7 @@ fi
 # We also do manual cleanup below for cloud-init ISOs which aren't managed volumes.
 
 log "Removing domain definition..."
-if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
+if virsh -c qemu:///system dominfo "$VM_NAME" >/dev/null 2>&1; then
     VM_NAME="$VM_NAME" python3 -c "
 import os
 from blockhost.root_agent import call

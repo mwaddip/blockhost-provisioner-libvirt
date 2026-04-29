@@ -35,10 +35,12 @@ for vm in vms:
     if db_status == 'destroyed':
         status = 'destroyed'
     else:
-        # Cross-check with virsh for live state
+        # Cross-check with virsh for live state. -c qemu:///system: blockhost
+        # user is in libvirt group, but virsh defaults to qemu:///session
+        # (no managed domains) without an explicit URI.
         try:
             r = subprocess.run(
-                ['virsh', 'domstate', name],
+                ['virsh', '-c', 'qemu:///system', 'domstate', name],
                 capture_output=True, text=True, timeout=5,
             )
             state = r.stdout.strip() if r.returncode == 0 else ''

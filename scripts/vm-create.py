@@ -252,7 +252,7 @@ def _get_libvirt_network_gateway(network_name="default"):
     """
     try:
         result = subprocess.run(
-            ["virsh", "net-dumpxml", network_name],
+            ["virsh", "-c", "qemu:///system", "net-dumpxml", network_name],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
@@ -313,9 +313,11 @@ def _wait_for_guest_ready(name, timeout_seconds=GUEST_READY_TIMEOUT_SECONDS):
 
     cloud-init brings qemu-guest-agent up partway through first boot;
     the timeout has to cover slow disks and nested virt. Direct virsh
-    call (no root agent): the local socket already permits read-only
-    and qemu-agent-command for the blockhost user, same path
-    vm-metrics.py uses for guest-ping.
+    call (no root agent): the blockhost user has libvirt-group access
+    to qemu:///system, which is where managed domains live. Without
+    -c qemu:///system, virsh defaults to qemu:///session for
+    non-root users — a per-user namespace with zero domains, so the
+    lookup fails until timeout.
 
     Returns True on first successful ping, False on overall timeout.
     """
@@ -325,7 +327,8 @@ def _wait_for_guest_ready(name, timeout_seconds=GUEST_READY_TIMEOUT_SECONDS):
     while time.monotonic() < deadline:
         try:
             result = subprocess.run(
-                ["virsh", "qemu-agent-command", name, ping_cmd,
+                ["virsh", "-c", "qemu:///system",
+                 "qemu-agent-command", name, ping_cmd,
                  "--timeout", str(GUEST_PING_TIMEOUT)],
                 capture_output=True, text=True,
                 timeout=GUEST_PING_TIMEOUT + 3,

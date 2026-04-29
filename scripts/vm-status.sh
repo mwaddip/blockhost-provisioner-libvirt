@@ -24,7 +24,9 @@ fi
 
 # Query libvirt domain state. virsh domstate exits non-zero if the domain
 # doesn't exist, which we handle as "destroyed".
-STATE=$(virsh domstate "$VM_NAME" 2>/dev/null) || {
+# -c qemu:///system: blockhost user is in libvirt group, but virsh defaults
+# to qemu:///session (no managed domains) without an explicit URI.
+STATE=$(virsh -c qemu:///system domstate "$VM_NAME" 2>/dev/null) || {
     echo "destroyed"
     exit 0
 }

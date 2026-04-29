@@ -14,10 +14,14 @@ def get_vm_tap_interface(domain):
     Parses ``virsh domiflist <domain>`` and returns the interface name
     (e.g. 'vnet0') of the first row whose connection type is 'bridge',
     or None if the domain has no bridge interface or virsh fails.
+
+    -c qemu:///system is required: the blockhost user is in the libvirt
+    group but virsh defaults to qemu:///session (per-user namespace, no
+    managed domains) without an explicit URI.
     """
     try:
         result = subprocess.run(
-            ["virsh", "domiflist", domain],
+            ["virsh", "-c", "qemu:///system", "domiflist", domain],
             capture_output=True, text=True, timeout=5,
         )
     except (subprocess.SubprocessError, FileNotFoundError):
